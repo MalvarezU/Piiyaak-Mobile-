@@ -1,0 +1,85 @@
+import { useState } from "react";
+import { Text, TextInput, TouchableOpacity, View, StyleSheet } from "react-native";
+import { useAuth } from "../auth";
+import { useDb } from "../db-context";
+import { theme } from "../theme";
+
+export default function Ajustes() {
+  const { session, login, logout } = useAuth();
+  const { ready, syncing, lastSync, sync, store } = useDb();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [count, setCount] = useState<number | null>(null);
+
+  async function handleLogin() {
+    setError(null);
+    const ok = await login(email, password);
+    if (!ok) setError("No se pudo entrar. Revisa tus datos o tu conexión.");
+  }
+
+  async function handleSync() {
+    await sync();
+    if (store) setCount(await store.count());
+  }
+
+  return (
+    <View style={styles.root}>
+      <Text style={styles.h}>Cuenta</Text>
+      {session ? (
+        <>
+          <Text style={styles.row}>{session.user.email}</Text>
+          <TouchableOpacity style={styles.btnGhost} onPress={logout}>
+            <Text style={styles.btnGhostText}>Cerrar sesión</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder="Correo"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <TouchableOpacity style={styles.btn} onPress={handleLogin}>
+            <Text style={styles.btnText}>Entrar</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      <Text style={styles.h}>Sincronización</Text>
+      <Text style={styles.row}>
+        Estado: {!ready ? "preparando..." : syncing ? "sincronizando..." : "lista"}
+      </Text>
+      <Text style={styles.row}>
+        Última sincronización: {lastSync ? new Date(lastSync).toLocaleString() : "nunca"}
+      </Text>
+      {count !== null && <Text style={styles.row}>Palabras locales: {count}</Text>}
+      <TouchableOpacity style={styles.btn} onPress={handleSync} disabled={!ready || syncing}>
+        <Text style={styles.btnText}>Sincronizar ahora</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.background, padding: 16, gap: 8 },
+  h: { fontSize: 18, fontWeight: "bold" as const, color: theme.primary, marginTop: 12 },
+  row: { fontSize: 15 },
+  input: { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: theme.radius, padding: 12, fontSize: 16 },
+  btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center" as const, marginTop: 4 },
+  btnText: { color: "#fff", fontSize: 16, fontWeight: "600" as const },
+  btnGhost: { padding: 12, alignItems: "center" as const },
+  btnGhostText: { color: theme.danger, fontSize: 15 },
+  error: { color: theme.danger },
+});
