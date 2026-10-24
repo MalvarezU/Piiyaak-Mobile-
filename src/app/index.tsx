@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
-import { FlatList, Text, TextInput, TouchableOpacity, View, StyleSheet } from "react-native";
+import { FlatList, RefreshControl, Text, TextInput, TouchableOpacity, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../db-context";
 import { useAuth } from "../auth";
 import { theme } from "../theme";
+import { EmptyState } from "../components/empty-state";
 import type { WordRow } from "../db/types";
 import { apiFetch } from "../api";
 
 export default function Buscar() {
-  const { store, ready } = useDb();
+  const { store, ready, sync } = useDb();
   const { session } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<WordRow[]>([]);
   const [wod, setWod] = useState<WordRow | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +68,15 @@ export default function Buscar() {
     };
   }, [store, session]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await sync();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <Text style={styles.title}>Piiyaak</Text>
@@ -87,9 +98,13 @@ export default function Buscar() {
         autoCapitalize="none"
       />
       {!ready && <Text style={styles.muted}>Preparando diccionario offline...</Text>}
+      {q.trim().length >= 2 && results.length === 0 ? (
+        <EmptyState message="Sin resultados" icon="🔍" />
+      ) : null}
       <FlatList
         data={results}
         keyExtractor={(w) => w.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}

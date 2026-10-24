@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { FlatList, RefreshControl, Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../db-context";
+import { EmptyState } from "../components/empty-state";
 import { theme } from "../theme";
 import type { WordRow } from "../db/types";
 
@@ -27,20 +28,29 @@ function useFavWords(ids: string[]): WordRow[] {
 }
 
 export default function Favoritos() {
-  const { favorites, toggleFavorite } = useDb();
+  const { favorites, toggleFavorite, sync } = useDb();
   const router = useRouter();
   const words = useFavWords(favorites);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await sync();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <View style={styles.root}>
       {words.length === 0 ? (
-        <Text style={styles.muted}>
-          Sin favoritas. Marca palabras desde su ficha para verlas aquí sin conexión.
-        </Text>
+        <EmptyState message="Sin favoritas. Marca palabras desde su ficha para verlas aquí sin conexión." icon="⭐" />
       ) : (
         <FlatList
           data={words}
           keyExtractor={(w) => w.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.row}

@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { FlatList, ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { FlatList, RefreshControl, ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../db-context";
+import { EmptyState } from "../components/empty-state";
 import { theme } from "../theme";
 import type { WordRow } from "../db/types";
 
 export default function Explorar() {
-  const { store } = useDb();
+  const { store, sync } = useDb();
   const router = useRouter();
   const [words, setWords] = useState<WordRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [category, setCategory] = useState<string | null>(null);
@@ -50,6 +52,17 @@ export default function Explorar() {
     setWords([]);
   }, [category]);
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await sync();
+      setPage(0);
+      setWords([]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catBar}>
@@ -72,9 +85,11 @@ export default function Explorar() {
       <Text style={styles.count}>
         {words.length} de {total} palabras
       </Text>
+      {words.length === 0 ? <EmptyState message="Sin palabras en esta categoría" icon="📚" /> : null}
       <FlatList
         data={words}
         keyExtractor={(w) => w.id}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.row}
