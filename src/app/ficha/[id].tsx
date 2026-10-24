@@ -103,7 +103,7 @@ export default function Ficha() {
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: true },
-        (status) => {
+        (status: { isLoaded: boolean; didJustFinish?: boolean }) => {
           if (status.isLoaded && status.didJustFinish) {
             setPlaying(false);
           }

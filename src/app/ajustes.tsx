@@ -6,7 +6,7 @@ import { theme } from "../theme";
 
 export default function Ajustes() {
   const { session, login, logout } = useAuth();
-  const { ready, syncing, lastSync, sync, syncData, store, pendingOutboxCount } = useDb();
+  const { ready, syncing, syncProgress, lastSync, sync, syncData, store, pendingOutboxCount } = useDb();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export default function Ajustes() {
 
       <Text style={styles.h}>Sincronización</Text>
       <Text style={styles.row}>
-        Estado: {!ready ? "preparando..." : syncing ? "sincronizando..." : "lista"}
+        Estado: {!ready ? "preparando..." : syncing ? (syncProgress ? `sincronizando ${syncProgress.done}/${syncProgress.total}` : "sincronizando...") : "lista"}
       </Text>
       <Text style={styles.row}>
         Última sincronización: {lastSync ? new Date(lastSync).toLocaleString() : "nunca"}

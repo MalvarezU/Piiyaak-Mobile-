@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { openDatabaseSync } from "expo-sqlite";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system";
 import { SQLiteWordStore, type WordStore, type OutboxRow } from "./db/sqlite-store";
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
@@ -12,6 +14,7 @@ interface DbContextValue {
   store: WordStore | null;
   ready: boolean;
   syncing: boolean;
+  syncProgress: { done: number; total: number } | null;
   lastSync: string | null;
   sync: () => Promise<void>;
   syncData: () => Promise<void>;
@@ -30,6 +33,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const { session, ready: authReady } = useAuth();
   const [store, setStore] = useState<WordStore | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [historyIds, setHistoryIds] = useState<string[]>([]);
@@ -41,6 +45,23 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let alive = true;
     (async () => {
+      // Primera instalación: si hay una BD pre-poblada en el bundle (assets/piiyaak.db),
+      // copiarla antes de abrir, para tener el diccionario offline desde el primer arranque.
+      try {
+        const asset = Asset.fromModule(require("../assets/piiyaak.db"));
+        await asset.downloadAsync();
+        if (asset.localUri) {
+          const dbDir = `${FileSystem.documentDirectory}SQLite`;
+          await FileSystem.makeDirectoryAsync(dbDir, { intermediates: true });
+          const dbPath = `${dbDir}/piiyaak.db`;
+          const info = await FileSystem.getInfoAsync(dbPath);
+          if (!info.exists) {
+            await FileSystem.copyAsync({ from: asset.localUri, to: dbPath });
+          }
+        }
+      } catch {
+        // Sin asset pre-poblado (Expo Go / dev): se siembra por red.
+      }
       const db = openDatabaseSync("piiyaak.db");
       const s = await SQLiteWordStore.open(db);
       if (!alive) return;
@@ -126,13 +147,15 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const sync = async () => {
     if (!store || syncing) return;
     setSyncing(true);
+    setSyncProgress(null);
     try {
-      await syncNow(store, session);
+      await syncNow(store, session, (done, total) => setSyncProgress({ done, total }));
       if (session) await flushOutbox(store, session).catch(() => {});
       setLastSync(await store.getLastSync());
       await refreshPending();
     } finally {
       setSyncing(false);
+      setSyncProgress(null);
     }
   };
 
@@ -213,6 +236,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       store,
       ready: !!store,
       syncing,
+      syncProgress,
       lastSync,
       sync,
       syncData,
@@ -223,7 +247,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       pendingOutboxCount,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, syncing, lastSync, favorites, historyWords, pendingOutboxCount]
+    [store, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount]
   );
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;
 }
