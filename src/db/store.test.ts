@@ -3,16 +3,18 @@ import { MemoryWordStore } from "./memory-store";
 import { fullSeed, incrementalSync } from "./sync";
 import type { WordRow } from "./types";
 
-const w = (id: string, spanish: string): WordRow => ({
+const w = (id: string, spanish: string, extra?: Partial<WordRow>): WordRow => ({
   id,
   spanish,
   nasaYuwe: `ny-${id}`,
   pronunciation: null,
   audioUrl: null,
+  illustrationUrl: null,
   culturalContext: null,
   category: null,
   examples: null,
   updatedAt: new Date().toISOString(),
+  ...extra,
 });
 
 describe("MemoryWordStore [app]", () => {
@@ -77,5 +79,24 @@ describe("sync [app]", () => {
   it("lanza error si el servidor falla", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response("x", { status: 500 }));
     await expect(fullSeed(new MemoryWordStore(), null)).rejects.toThrow();
+  });
+});
+
+describe("MemoryWordStore draft filtering [app]", () => {
+  it("excluye DRAFT de search/listAZ pero getById lo devuelve", async () => {
+    const s = new MemoryWordStore();
+    await s.upsertWords([
+      w("1", "hola"),
+      w("2", "borrador", { status: "DRAFT" }),
+    ]);
+    expect((await s.search("ho")).map((x) => x.id)).toEqual(["1"]);
+    expect((await s.listAZ()).map((x) => x.id)).toEqual(["1"]);
+    expect(await s.getById("2")).toMatchObject({ status: "DRAFT" });
+  });
+
+  it("persiste illustrationUrl", async () => {
+    const s = new MemoryWordStore();
+    await s.upsertWords([w("1", "hola", { illustrationUrl: "https://x/img.png" })]);
+    expect((await s.getById("1"))?.illustrationUrl).toBe("https://x/img.png");
   });
 });

@@ -5,6 +5,7 @@ export interface WordRow {
   nasaYuwe: string;
   pronunciation: string | null;
   audioUrl: string | null;
+  illustrationUrl: string | null;
   culturalContext: string | null;
   category: string | null;
   examples: string | null;
