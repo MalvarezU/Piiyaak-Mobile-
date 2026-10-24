@@ -9,6 +9,11 @@
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "https://diccionario-nasa-liart.vercel.app";
 
+// Hardening: en producción la URL base debe ser HTTPS.
+if (typeof __DEV__ !== "undefined" && !__DEV__ && !API_BASE_URL.startsWith("https://")) {
+  throw new Error("API_BASE_URL debe usar HTTPS en producción");
+}
+
 export interface SessionState {
   cookie: string;
   user: { id: string; email: string; name: string | null; role: string };
