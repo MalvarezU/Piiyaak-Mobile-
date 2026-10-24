@@ -2,14 +2,18 @@ import { useEffect, useState } from "react";
 import { FlatList, Text, TextInput, TouchableOpacity, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../db-context";
+import { useAuth } from "../auth";
 import { theme } from "../theme";
 import type { WordRow } from "../db/types";
+import { apiFetch } from "../api";
 
 export default function Buscar() {
   const { store, ready } = useDb();
+  const { session } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<WordRow[]>([]);
+  const [wod, setWod] = useState<WordRow | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -27,9 +31,54 @@ export default function Buscar() {
     };
   }, [q, store]);
 
+  // Palabra del día (cacheada por fecha en kv)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!store) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const cachedDate = await store.getKV("wodDate");
+      const cachedId = await store.getKV("wodId");
+      if (cachedDate === today && cachedId) {
+        const w = await store.getById(cachedId);
+        if (alive && w) setWod(w);
+      }
+      // best-effort refresh online
+      if (session) {
+        try {
+          const res = await apiFetch(`/api/dictionary/word-of-day?date=${today}`, {}, session);
+          if (res.ok) {
+            const body = (await res.json()) as { word?: { id: string } | null };
+            if (body.word?.id) {
+              await store.setKV("wodDate", today);
+              await store.setKV("wodId", body.word.id);
+              const w = await store.getById(body.word.id);
+              if (alive && w) setWod(w);
+            }
+          }
+        } catch {
+          // offline: keep cached
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [store, session]);
+
   return (
     <View style={styles.root}>
       <Text style={styles.title}>Piiyaak</Text>
+      {wod ? (
+        <TouchableOpacity
+          style={styles.wod}
+          onPress={() => router.push({ pathname: "/ficha/[id]", params: { id: wod.id } })}
+        >
+          <Text style={styles.wodLabel}>Palabra del día</Text>
+          <Text style={styles.wodEs}>{wod.spanish}</Text>
+          <Text style={styles.wodNy}>{wod.nasaYuwe}</Text>
+        </TouchableOpacity>
+      ) : null}
       <TextInput
         style={styles.input}
         placeholder="Buscar (mínimo 2 letras)..."
@@ -58,6 +107,10 @@ export default function Buscar() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.background, padding: 16 },
   title: { fontSize: 28, fontWeight: "bold", color: theme.primary, textAlign: "center", marginBottom: 12 },
+  wod: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: theme.border },
+  wodLabel: { fontSize: 12, color: theme.muted, marginBottom: 4 },
+  wodEs: { fontSize: 18, fontWeight: "600" },
+  wodNy: { fontSize: 16, color: theme.primary },
   input: { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: theme.radius, padding: 12, fontSize: 16, marginBottom: 12 },
   muted: { color: theme.muted, textAlign: "center", marginVertical: 8 },
   row: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: theme.border },

@@ -6,7 +6,7 @@ import { theme } from "../theme";
 
 export default function Ajustes() {
   const { session, login, logout } = useAuth();
-  const { ready, syncing, lastSync, sync, store } = useDb();
+  const { ready, syncing, lastSync, sync, syncData, store, pendingOutboxCount } = useDb();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -65,8 +65,12 @@ export default function Ajustes() {
         Última sincronización: {lastSync ? new Date(lastSync).toLocaleString() : "nunca"}
       </Text>
       {count !== null && <Text style={styles.row}>Palabras locales: {count}</Text>}
+      <Text style={styles.row}>Cambios pendientes: {pendingOutboxCount}</Text>
       <TouchableOpacity style={styles.btn} onPress={handleSync} disabled={!ready || syncing}>
         <Text style={styles.btnText}>Sincronizar ahora</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.btnGhost} onPress={syncData} disabled={syncing}>
+        <Text style={styles.btnGhostText}>Sincronizar datos</Text>
       </TouchableOpacity>
     </View>
   );

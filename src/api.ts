@@ -17,14 +17,21 @@ export interface SessionState {
 export async function apiFetch(
   path: string,
   init: RequestInit = {},
-  session: SessionState | null = null
+  session: SessionState | null = null,
+  timeoutMs = 15000
 ): Promise<Response> {
   const headers = new Headers(init.headers ?? {});
   if (init.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (session) headers.set("Cookie", session.cookie);
-  return fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(`${API_BASE_URL}${path}`, { ...init, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
