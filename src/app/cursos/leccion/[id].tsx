@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Audio } from "expo-av";
+import { QuizBlock } from "../../../components/quiz-block";
 import { ScrollView, Text, TouchableOpacity, View, StyleSheet, Image } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDb } from "../../../db-context";
@@ -108,20 +110,9 @@ function renderBlock(block: Block) {
     case "vocabulary":
       return <Text style={styles.vocabBlock}>📚 Vocabulario: {(block.wordIds as string[])?.length ?? 0} palabras</Text>;
     case "quiz": {
-      const questions = (block.questions as Array<{ prompt: string; options: Array<{ text: string; correct: boolean }> }>) ?? [];
-      return (
-        <View>
-          <Text style={styles.quizTitle}>Quiz ({questions.length} preguntas)</Text>
-          {questions.map((q, i) => (
-            <View key={i} style={styles.quizQ}>
-              <Text style={styles.quizPrompt}>{q.prompt}</Text>
-              {q.options.map((o, j) => (
-                <Text key={j} style={styles.quizOption}>• {o.text}</Text>
-              ))}
-            </View>
-          ))}
-        </View>
-      );
+      const questions = (block.questions as Array<{ prompt: string; options: Array<{ text: string; correct: boolean }>; explanation?: string }>) ?? [];
+      const passScore = typeof block.passScore === "number" ? block.passScore : 70;
+      return <QuizBlock questions={questions} passScore={passScore} />;
     }
     case "listening": {
       const opts = (block.options as Array<{ text: string; correct: boolean }>) ?? [];
