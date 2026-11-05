@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View, StyleSheet } from "react-native";
 import { useAuth } from "../auth";
 import { useDb } from "../db-context";
+import { useRouter } from "expo-router";
 import { theme } from "../theme";
 
 export default function Ajustes() {
   const { session, login, logout } = useAuth();
   const { ready, syncing, syncProgress, lastSync, sync, syncData, store, pendingOutboxCount } = useDb();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,12 @@ export default function Ajustes() {
             secureTextEntry
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
+      <TouchableOpacity style={styles.link} onPress={() => router.push("/registro")}>
+        <Text style={styles.linkText}>Crear cuenta</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.link} onPress={() => router.push("/recuperar")}>
+        <Text style={styles.linkText}>Olvidé mi contraseña</Text>
+      </TouchableOpacity>
           <TouchableOpacity style={styles.btn} onPress={handleLogin}>
             <Text style={styles.btnText}>Entrar</Text>
           </TouchableOpacity>
@@ -86,4 +94,6 @@ const styles = StyleSheet.create({
   btnGhost: { padding: 12, alignItems: "center" as const },
   btnGhostText: { color: theme.danger, fontSize: 15 },
   error: { color: theme.danger },
+  link: { padding: 8, alignItems: "center" as const },
+  linkText: { color: theme.primary, fontSize: 15 },
 });

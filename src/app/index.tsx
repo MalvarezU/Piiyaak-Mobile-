@@ -98,6 +98,9 @@ export default function Buscar() {
         autoCapitalize="none"
       />
       {!ready && <Text style={styles.muted}>Preparando diccionario offline...</Text>}
+      <TouchableOpacity style={styles.gamesBtn} onPress={() => router.push("/juegos")}>
+        <Text style={styles.gamesBtnText}>🎮 Juegos</Text>
+      </TouchableOpacity>
       {q.trim().length >= 2 && results.length === 0 ? (
         <EmptyState message="Sin resultados" icon="🔍" />
       ) : null}
@@ -131,4 +134,6 @@ const styles = StyleSheet.create({
   row: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: theme.border },
   es: { fontSize: 18, fontWeight: "600" },
   ny: { fontSize: 16, color: theme.primary },
+  gamesBtn: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 10, alignItems: "center", marginBottom: 12, borderWidth: 1, borderColor: theme.border },
+  gamesBtnText: { fontSize: 16, fontWeight: "600", color: theme.primary },
 });

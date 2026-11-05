@@ -88,3 +88,83 @@ export async function loginRequest(
     },
   };
 }
+
+/**
+ * Registro de cuenta nueva (B1.1/B1.2).
+ * Devuelve { ok, requiresVerification, message }.
+ */
+export async function registerRequest(
+  email: string,
+  password: string,
+  name?: string
+): Promise<{ ok: boolean; requiresVerification: boolean; message: string }> {
+  const base = API_BASE_URL;
+  try {
+    const res = await fetch(`${base}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), password, name: name?.trim() || undefined }),
+    });
+    const body = (await res.json()) as {
+      success?: boolean;
+      requiresVerification?: boolean;
+      message?: string;
+    };
+    if (res.ok && body.success) {
+      return {
+        ok: true,
+        requiresVerification: !!body.requiresVerification,
+        message: body.requiresVerification
+          ? "Cuenta creada. Revisa tu correo para verificar."
+          : "Cuenta creada. Ya puedes entrar.",
+      };
+    }
+    return { ok: false, requiresVerification: false, message: body.message ?? "No se pudo registrar." };
+  } catch {
+    return { ok: false, requiresVerification: false, message: "Error de conexión." };
+  }
+}
+
+/**
+ * Solicitar recuperación de contraseña (B1.4). Siempre ok (anti-enumeración).
+ */
+export async function recoverRequest(email: string): Promise<{ ok: boolean; message: string }> {
+  const base = API_BASE_URL;
+  try {
+    const res = await fetch(`${base}/api/auth/recover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    if (res.ok) {
+      return { ok: true, message: "Si el correo existe, recibirás un enlace." };
+    }
+    return { ok: false, message: "No se pudo solicitar la recuperación." };
+  } catch {
+    return { ok: false, message: "Error de conexión." };
+  }
+}
+
+/**
+ * Reset de contraseña con token (B1.4).
+ */
+export async function resetRequest(
+  token: string,
+  password: string
+): Promise<{ ok: boolean; message: string }> {
+  const base = API_BASE_URL;
+  try {
+    const res = await fetch(`${base}/api/auth/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
+    const body = (await res.json()) as { ok?: boolean; message?: string };
+    if (res.ok && body.ok) {
+      return { ok: true, message: "Contraseña actualizada. Ya puedes entrar." };
+    }
+    return { ok: false, message: body.message ?? "Enlace inválido o expirado." };
+  } catch {
+    return { ok: false, message: "Error de conexión." };
+  }
+}
