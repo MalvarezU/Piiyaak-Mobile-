@@ -148,8 +148,10 @@ function renderBlock(block: Block, wordMap: Record<string, { spanish: string; na
     }
     case "listening": {
       const opts = (block.options as Array<{ text: string; correct: boolean }>) ?? [];
+      const mediaUrl = (block.media as { url?: string })?.url;
       return (
         <View>
+          {mediaUrl ? <Text style={styles.audioBlock}>🔊 {mediaUrl}</Text> : null}
           <Text style={styles.listenQ}>{String(block.question ?? "")}</Text>
           {opts.map((o, j) => (
             <Text key={j} style={styles.quizOption}>• {o.text}</Text>
