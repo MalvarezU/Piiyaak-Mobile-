@@ -53,7 +53,24 @@ export class SQLiteCourseStore implements CourseStore {
 
   async getCourses(): Promise<CourseRow[]> {
     const rows = await this.db.getAllAsync<any>("SELECT * FROM courses WHERE status = 'PUBLISHED' ORDER BY title");
-    return rows.map((r) => ({ ...r, sequential: !!r.sequential, modules: [] }));
+    const result: CourseRow[] = [];
+    for (const r of rows) {
+      const mods = await this.db.getAllAsync<any>('SELECT id FROM modules WHERE courseId = ?', [r.id]);
+      const lessonIds = [];
+      for (const m of mods) {
+        const ls = await this.db.getAllAsync<any>('SELECT id FROM lessons WHERE moduleId = ?', [m.id]);
+        for (const l of ls) lessonIds.push(l.id);
+      }
+      let done = 0;
+      if (lessonIds.length > 0) {
+        const placeholders = lessonIds.map(() => "?").join(",");
+        const prog = await this.db.getAllAsync<any>(`SELECT completed FROM course_progress WHERE lessonId IN (${placeholders})`, lessonIds);
+        done = prog.filter((p: any) => p.completed).length;
+      }
+      const pct = lessonIds.length > 0 ? Math.round((done / lessonIds.length) * 100) : null;
+      result.push({ ...r, sequential: !!r.sequential, modules: [], progressPct: pct });
+    }
+    return result;
   }
 
   async getCourse(id: string): Promise<CourseRow | null> {

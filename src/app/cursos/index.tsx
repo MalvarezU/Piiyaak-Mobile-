@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { useAuth } from "../../auth";
 import { SQLiteCourseStore } from "../../db/course-store";
-import { syncCourses } from "../../db/sync-courses";
+import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
 import { openDatabaseSync } from "expo-sqlite";
 import { theme } from "../../theme";
 import type { CourseRow } from "../../db/course-types";
@@ -12,6 +12,7 @@ import type { CourseRow } from "../../db/course-types";
 export default function Cursos() {
   const { store, ready } = useDb();
   const { session } = useAuth();
+  const [wordStore, setWordStore] = useState<any>(null);
   const router = useRouter();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -43,6 +44,9 @@ export default function Cursos() {
     setSyncing(true);
     try {
       await syncCourses(courseStore, session);
+      if (store && session) {
+        await flushCourseProgress(courseStore, store, session);
+      }
       await loadCourses();
     } catch (e) {
       console.error("sync courses error", e);
