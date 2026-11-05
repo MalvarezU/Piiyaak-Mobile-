@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, StyleSheet, Image } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDb } from "../../../db-context";
+import { useAuth } from "../../../auth";
 import { SQLiteCourseStore } from "../../../db/course-store";
 import { openDatabaseSync } from "expo-sqlite";
+import { apiFetch } from "../../../api";
 import { theme } from "../../../theme";
 import type { LessonRow } from "../../../db/course-types";
+import type { CourseProgressRow } from "../../../db/course-types";
 
 interface Block {
   id: string;
@@ -16,9 +19,12 @@ interface Block {
 export default function Leccion() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { store } = useDb();
+  const { session } = useAuth();
   const router = useRouter();
   const [lesson, setLesson] = useState<LessonRow | null>(null);
   const [courseStore, setCourseStore] = useState<SQLiteCourseStore | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [progressStore, setProgressStore] = useState<SQLiteCourseStore | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -28,8 +34,11 @@ export default function Leccion() {
       const cs = await SQLiteCourseStore.open(db);
       if (!alive) return;
       setCourseStore(cs);
+      setProgressStore(cs);
       const l = await cs.getLesson(String(id));
       if (alive && l) setLesson(l);
+      const p = await cs.getProgress(String(id));
+      if (alive && p) setCompleted(p.completed);
     })();
     return () => { alive = false; };
   }, [store, id]);
@@ -53,6 +62,20 @@ export default function Leccion() {
           {renderBlock(block)}
         </View>
       ))}
+      <TouchableOpacity
+        style={[styles.btn, completed ? styles.btnDone : null]}
+        onPress={async () => {
+          if (!progressStore || !id) return;
+          const next = !completed;
+          setCompleted(next);
+          await progressStore.setProgress(String(id), next, next ? 100 : null);
+          if (session) {
+            apiFetch("/api/progress", { method: "POST", body: JSON.stringify({ lessonId: id, completed: next }) }, session).catch(() => {});
+          }
+        }}
+      >
+        <Text style={styles.btnText}>{completed ? "✓ Completada" : "Marcar como completada"}</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.btn} onPress={() => router.back()}>
         <Text style={styles.btnText}>Volver</Text>
       </TouchableOpacity>
@@ -128,6 +151,7 @@ const styles = StyleSheet.create({
   quizOption: { fontSize: 14, marginLeft: 8, color: theme.muted },
   listenQ: { fontSize: 15, fontWeight: "600", marginBottom: 8 },
   muted: { color: theme.muted, textAlign: "center", marginTop: 32 },
-  btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 16, marginBottom: 32 },
+  btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 16 },
+  btnDone: { backgroundColor: "#16a34a" },
   btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 });
