@@ -101,6 +101,9 @@ export default function Buscar() {
       <TouchableOpacity style={styles.gamesBtn} onPress={() => router.push("/juegos")}>
         <Text style={styles.gamesBtnText}>🎮 Juegos</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.gamesBtn} onPress={() => router.push("/cursos")}>
+        <Text style={styles.gamesBtnText}>📚 Cursos</Text>
+      </TouchableOpacity>
       {q.trim().length >= 2 && results.length === 0 ? (
         <EmptyState message="Sin resultados" icon="🔍" />
       ) : null}
