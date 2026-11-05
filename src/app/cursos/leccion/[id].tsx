@@ -70,7 +70,12 @@ export default function Leccion() {
           setCompleted(next);
           await progressStore.setProgress(String(id), next, next ? 100 : null);
           if (session) {
-            apiFetch("/api/progress", { method: "POST", body: JSON.stringify({ lessonId: id, completed: next }) }, session).catch(() => {});
+            apiFetch("/api/progress", { method: "POST", body: JSON.stringify({ lessonId: id, completed: next }) }, session).catch(() => {
+              // queue for later sync
+              store?.addOutbox("course_progress", "progress.set", JSON.stringify({ lessonId: id, completed: next })).catch(() => {});
+            });
+          } else {
+            store?.addOutbox("course_progress", "progress.set", JSON.stringify({ lessonId: id, completed: next })).catch(() => {});
           }
         }}
       >

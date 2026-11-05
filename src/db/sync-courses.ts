@@ -63,3 +63,23 @@ export async function syncCourses(
 
   return { courses: body.courses.length, modules: modCount, lessons: lesCount };
 }
+
+/** Drena el outbox de progreso de cursos al servidor. */
+export async function flushCourseProgress(
+  store: CourseStore,
+  wordStore: { pendingOutbox: () => Promise<Array<{ id: number; entity: string; op: string; payload: string }>>; markOutboxSynced: (id: number) => Promise<void> },
+  session: SessionState | null
+): Promise<void> {
+  if (!session) return;
+  const pending = await wordStore.pendingOutbox();
+  for (const row of pending) {
+    if (row.entity !== "course_progress") continue;
+    try {
+      const payload = JSON.parse(row.payload);
+      const res = await apiFetch("/api/progress", { method: "POST", body: JSON.stringify(payload) }, session);
+      if (res.ok) await wordStore.markOutboxSynced(row.id);
+    } catch {
+      // leave pending
+    }
+  }
+}
