@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Audio } from "expo-av";
 import { QuizBlock } from "../../../components/quiz-block";
+import { RichTextBlock } from "../../../components/rich-text-block";
 
 function ListeningPlayer({ url }: { url: string }) {
   const [playing, setPlaying] = useState(false);
@@ -153,7 +154,7 @@ export default function Leccion() {
 function renderBlock(block: Block, wordMap: Record<string, { spanish: string; nasaYuwe: string }>) {
   switch (block.type) {
     case "text":
-      return <Text style={styles.textBlock}>{String(block.html ?? "").replace(/<[^>]*>/g, "")}</Text>;
+      return <RichTextBlock html={String(block.html ?? "")} />;
     case "image":
       return (
         <View>
