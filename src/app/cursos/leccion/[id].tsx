@@ -1,6 +1,46 @@
 import { useEffect, useState } from "react";
 import { Audio } from "expo-av";
 import { QuizBlock } from "../../../components/quiz-block";
+
+function ListeningPlayer({ url }: { url: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+
+  const toggle = async () => {
+    if (sound) {
+      if (playing) {
+        await sound.pauseAsync();
+        setPlaying(false);
+      } else {
+        await sound.playAsync();
+        setPlaying(true);
+      }
+      return;
+    }
+    try {
+      const { sound: s } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
+      setSound(s);
+      setPlaying(true);
+      s.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) setPlaying(false);
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      sound?.unloadAsync().catch(() => {});
+    };
+  }, [sound]);
+
+  return (
+    <TouchableOpacity style={styles.audioBtn} onPress={toggle}>
+      <Text style={styles.audioBtnText}>{playing ? "⏸ Pausar audio" : "▶ Reproducir audio"}</Text>
+    </TouchableOpacity>
+  );
+}
 import { ScrollView, Text, TouchableOpacity, View, StyleSheet, Image } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDb } from "../../../db-context";
@@ -151,7 +191,7 @@ function renderBlock(block: Block, wordMap: Record<string, { spanish: string; na
       const mediaUrl = (block.media as { url?: string })?.url;
       return (
         <View>
-          {mediaUrl ? <Text style={styles.audioBlock}>🔊 {mediaUrl}</Text> : null}
+          {mediaUrl ? <ListeningPlayer url={mediaUrl} /> : null}
           <Text style={styles.listenQ}>{String(block.question ?? "")}</Text>
           {opts.map((o, j) => (
             <Text key={j} style={styles.quizOption}>• {o.text}</Text>
@@ -172,6 +212,8 @@ const styles = StyleSheet.create({
   imageBlock: { width: "100%", height: 200, borderRadius: theme.radius },
   caption: { fontSize: 12, color: theme.muted, marginTop: 4, textAlign: "center" },
   audioBlock: { fontSize: 15, color: theme.primary },
+  audioBtn: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 12, alignItems: "center", borderWidth: 1, borderColor: theme.border, marginBottom: 8 },
+  audioBtnText: { fontSize: 15, fontWeight: "600", color: theme.primary },
   videoBlock: { fontSize: 15, color: theme.primary },
   wordBlock: { fontSize: 15 },
   vocabBlock: { fontSize: 15 },
