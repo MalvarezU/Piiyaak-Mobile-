@@ -27,6 +27,7 @@ export default function Leccion() {
   const [courseStore, setCourseStore] = useState<SQLiteCourseStore | null>(null);
   const [completed, setCompleted] = useState(false);
   const [progressStore, setProgressStore] = useState<SQLiteCourseStore | null>(null);
+  const [wordMap, setWordMap] = useState<Record<string, { spanish: string; nasaYuwe: string }>>({});
 
   useEffect(() => {
     let alive = true;
@@ -41,6 +42,25 @@ export default function Leccion() {
       if (alive && l) setLesson(l);
       const p = await cs.getProgress(String(id));
       if (alive && p) setCompleted(p.completed);
+      // Fetch words for word/vocabulary blocks
+      if (alive && l) {
+        try {
+          const content = JSON.parse(l.content) as { blocks?: Array<{ type: string; wordId?: string; wordIds?: string[] }> };
+          const ids = new Set<string>();
+          for (const b of content.blocks ?? []) {
+            if (b.type === "word" && b.wordId) ids.add(b.wordId);
+            if (b.type === "vocabulary" && b.wordIds) b.wordIds.forEach((w) => ids.add(w));
+          }
+          const wm: Record<string, { spanish: string; nasaYuwe: string }> = {};
+          for (const wid of ids) {
+            const w = await store?.getById(wid);
+            if (w) wm[wid] = { spanish: w.spanish, nasaYuwe: w.nasaYuwe };
+          }
+          if (alive) setWordMap(wm);
+        } catch {
+          // ignore
+        }
+      }
     })();
     return () => { alive = false; };
   }, [store, id]);
@@ -61,7 +81,7 @@ export default function Leccion() {
       <Text style={styles.title}>{lesson.title}</Text>
       {content.blocks.map((block) => (
         <View key={block.id} style={styles.block}>
-          {renderBlock(block)}
+          {renderBlock(block, wordMap)}
         </View>
       ))}
       <TouchableOpacity
@@ -90,7 +110,7 @@ export default function Leccion() {
   );
 }
 
-function renderBlock(block: Block) {
+function renderBlock(block: Block, wordMap: Record<string, { spanish: string; nasaYuwe: string }>) {
   switch (block.type) {
     case "text":
       return <Text style={styles.textBlock}>{String(block.html ?? "").replace(/<[^>]*>/g, "")}</Text>;
@@ -105,10 +125,22 @@ function renderBlock(block: Block) {
       return <Text style={styles.audioBlock}>🔊 Audio: {String((block.media as { url?: string })?.url ?? "")}</Text>;
     case "video":
       return <Text style={styles.videoBlock}>🎬 Video: {String(block.title ?? "")}</Text>;
-    case "word":
-      return <Text style={styles.wordBlock}>📖 Palabra: {String(block.wordId)}</Text>;
-    case "vocabulary":
-      return <Text style={styles.vocabBlock}>📚 Vocabulario: {(block.wordIds as string[])?.length ?? 0} palabras</Text>;
+    case "word": {
+      const w = wordMap[String(block.wordId)];
+      return <Text style={styles.wordBlock}>📖 {w ? `${w.spanish} → ${w.nasaYuwe}` : String(block.wordId)}</Text>;
+    }
+    case "vocabulary": {
+      const ids = (block.wordIds as string[]) ?? [];
+      return (
+        <View>
+          <Text style={styles.vocabBlock}>📚 Vocabulario ({ids.length}):</Text>
+          {ids.map((wid) => {
+            const w = wordMap[wid];
+            return <Text key={wid} style={styles.vocabItem}>{w ? `${w.spanish} → ${w.nasaYuwe}` : wid}</Text>;
+          })}
+        </View>
+      );
+    }
     case "quiz": {
       const questions = (block.questions as Array<{ prompt: string; options: Array<{ text: string; correct: boolean }>; explanation?: string }>) ?? [];
       const passScore = typeof block.passScore === "number" ? block.passScore : 70;
@@ -141,6 +173,7 @@ const styles = StyleSheet.create({
   videoBlock: { fontSize: 15, color: theme.primary },
   wordBlock: { fontSize: 15 },
   vocabBlock: { fontSize: 15 },
+  vocabItem: { fontSize: 14, marginLeft: 8, color: theme.muted },
   quizTitle: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
   quizQ: { marginBottom: 12 },
   quizPrompt: { fontSize: 15, fontWeight: "600", marginBottom: 4 },
