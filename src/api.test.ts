@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { apiFetch, loginRequest } from "./api";
+import { apiFetch, loginRequest, registerRequest, REGISTRATION_DISABLED_MESSAGE } from "./api";
 
 beforeEach(() => {
   vi.unstubAllGlobals();
@@ -67,5 +67,55 @@ describe("loginRequest", () => {
     vi.stubGlobal("fetch", fetchMock);
     const res = await loginRequest("a@b.com", "pw");
     expect(res).toBeNull();
+  });
+});
+
+describe("registerRequest", () => {
+  it("propagates server 410 message (registro con correo deshabilitado)", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 410,
+      json: async () => ({ success: false, message: "El registro con correo está deshabilitado. Registrate con Google." }),
+    } as unknown as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await registerRequest("a@b.com", "password123");
+    expect(res.ok).toBe(false);
+    expect(res.requiresVerification).toBe(false);
+    expect(res.message).toBe("El registro con correo está deshabilitado. Registrate con Google.");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/register"),
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("falls back to default ES message on 410 without body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 410,
+      json: async () => {
+        throw new SyntaxError("empty body");
+      },
+    } as unknown as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await registerRequest("a@b.com", "password123");
+    expect(res.ok).toBe(false);
+    expect(res.message).toBe(REGISTRATION_DISABLED_MESSAGE);
+  });
+
+  it("keeps success path when server allows registration", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, requiresVerification: false }),
+    } as unknown as Response));
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await registerRequest("a@b.com", "password123", "Ana");
+    expect(res).toEqual({ ok: true, requiresVerification: false, message: "Cuenta creada. Ya puedes entrar." });
+  });
+
+  it("returns connection error when fetch rejects", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
+    const res = await registerRequest("a@b.com", "password123");
+    expect(res).toEqual({ ok: false, requiresVerification: false, message: "Error de conexión." });
   });
 });

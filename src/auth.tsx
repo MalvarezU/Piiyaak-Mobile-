@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { loginRequest, registerRequest, type SessionState, apiFetch } from "./api";
+import { loginRequest, REGISTRATION_DISABLED_MESSAGE, type SessionState, apiFetch } from "./api";
 
 const SESSION_KEY = "piiyaak:session";
 
@@ -85,21 +85,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return !!s;
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name?: string) => {
-    const r = await registerRequest(email, password, name);
-    if (r.ok && !r.requiresVerification) {
-      // auto-login after register (dev mode auto-verifies)
-      const s = await loginRequest(email.trim(), password);
-      if (s) {
-        setSession(s);
-        try {
-          await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(s));
-        } catch {
-          // best-effort
-        }
-      }
-    }
-    return { ok: r.ok, message: r.message };
+  // Fase 3 APK (Google-first): el registro online con correo está
+  // deshabilitado en el servidor (410 Gone). No se hace POST a /register;
+  // se devuelve el aviso para dirigir a la web. Se mantiene la firma para
+  // no romper callers (la pantalla /registro ya es solo informativa).
+  // OAuth móvil queda para una fase futura.
+  const register = useCallback(async (_email: string, _password: string, _name?: string) => {
+    return { ok: false, message: REGISTRATION_DISABLED_MESSAGE };
   }, []);
 
   const logout = useCallback(() => {

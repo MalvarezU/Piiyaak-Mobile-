@@ -92,7 +92,14 @@ export async function loginRequest(
 /**
  * Registro de cuenta nueva (B1.1/B1.2).
  * Devuelve { ok, requiresVerification, message }.
+ *
+ * Fase 3 APK (Google-first): el servidor responde 410 Gone al registro
+ * con correo. Se propaga el mensaje del servidor (ES) o un texto
+ * por defecto que dirige a la web.
  */
+export const REGISTRATION_DISABLED_MESSAGE =
+  "Para crear tu cuenta, registrate en la web con Google y después creá tu contraseña en tu perfil para entrar acá.";
+
 export async function registerRequest(
   email: string,
   password: string,
@@ -105,11 +112,19 @@ export async function registerRequest(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim(), password, name: name?.trim() || undefined }),
     });
-    const body = (await res.json()) as {
-      success?: boolean;
-      requiresVerification?: boolean;
-      message?: string;
-    };
+    let body: { success?: boolean; requiresVerification?: boolean; message?: string } = {};
+    try {
+      body = (await res.json()) as typeof body;
+    } catch {
+      body = {};
+    }
+    if (res.status === 410) {
+      return {
+        ok: false,
+        requiresVerification: false,
+        message: body.message ?? REGISTRATION_DISABLED_MESSAGE,
+      };
+    }
     if (res.ok && body.success) {
       return {
         ok: true,

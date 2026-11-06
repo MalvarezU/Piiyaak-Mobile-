@@ -17,7 +17,13 @@ export default function Ajustes() {
   async function handleLogin() {
     setError(null);
     const ok = await login(email, password);
-    if (!ok) setError("No se pudo entrar. Revisa tus datos o tu conexión.");
+    // El login con email+contraseña sigue intacto. Si falla, puede ser una
+    // cuenta creada con Google que aún no tiene contraseña web (el flujo
+    // de credenciales no expone códigos, así que el hint va en el copy).
+    if (!ok)
+      setError(
+        "No se pudo entrar. Revisa tus datos o tu conexión. Si creaste tu cuenta con Google, creá tu contraseña en tu perfil de la web e intentá de nuevo."
+      );
   }
 
   async function handleSync() {
@@ -54,7 +60,7 @@ export default function Ajustes() {
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
       <TouchableOpacity style={styles.link} onPress={() => router.push("/registro")}>
-        <Text style={styles.linkText}>Crear cuenta</Text>
+        <Text style={styles.linkText}>Crear cuenta en la web</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.link} onPress={() => router.push("/recuperar")}>
         <Text style={styles.linkText}>Olvidé mi contraseña</Text>
