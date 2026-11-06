@@ -5,7 +5,13 @@
     "noUncheckedIndexedAccess": true,
     "module": "esnext",
     "moduleResolution": "bundler",
-    "types": ["vitest/globals"]
+    "types": [
+      "vitest/globals"
+    ]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
 }

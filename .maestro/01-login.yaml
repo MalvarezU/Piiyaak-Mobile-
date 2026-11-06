@@ -1,0 +1,6 @@
+appId: host.exp.exponent
+---
+- launchApp
+- waitForAnimationToEnd
+# In Expo Go, we need to open the project URL
+# This flow assumes the app is already loaded
