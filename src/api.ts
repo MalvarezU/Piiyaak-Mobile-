@@ -5,7 +5,7 @@
  * como cookie de NextAuth en memoria + usuario persistido.
  */
 
-// Cambiar por la URL de producción al publicar (EAS: app.config extra).
+// URL de producción: pendiente de dominio en Hostinger (EAS: app.config extra). Se mantiene la actual mientras el backend vivo responda ahí.
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "https://diccionario-nasa-liart.vercel.app";
 
