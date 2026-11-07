@@ -23,6 +23,7 @@ export default function RootLayout() {
           <Tabs.Screen name="juegos/flashcards" options={{ href: null, title: "Flashcards" }} />
           <Tabs.Screen name="juegos/memoria" options={{ href: null, title: "Memoria" }} />
           <Tabs.Screen name="juegos/completar" options={{ href: null, title: "Completar" }} />
+          <Tabs.Screen name="juegos/ordena" options={{ href: null, title: "Ordena" }} />
           <Tabs.Screen name="cursos/index" options={{ href: null, title: "Cursos" }} />
           <Tabs.Screen name="cursos/[id]" options={{ href: null, title: "Curso" }} />
           <Tabs.Screen name="cursos/leccion/[id]" options={{ href: null, title: "Lección" }} />

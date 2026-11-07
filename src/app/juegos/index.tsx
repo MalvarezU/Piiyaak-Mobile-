@@ -11,6 +11,7 @@ export default function JuegosHub() {
     { id: "flashcards", title: "Flashcards", desc: "Opción múltiple ES ↔ Nasa Yuwe", emoji: "🃏" },
     { id: "memoria", title: "Memoria", desc: "Empareja español y Nasa Yuwe", emoji: "🧠" },
     { id: "completar", title: "Completar", desc: "Completa la traducción", emoji: "✏️" },
+    { id: "ordena", title: "Ordena", desc: "Ordena las fichas de la palabra", emoji: "🔤" },
   ];
 
   return (
