@@ -28,7 +28,10 @@
     },
     "plugins": [
       "expo-router",
-      "react-native-zip-archive"
+      "react-native-zip-archive",
+      "expo-asset",
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true
