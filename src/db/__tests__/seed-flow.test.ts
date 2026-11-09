@@ -139,12 +139,6 @@ function fakeDeps(overrides: {
       async getUncompressedSize() {
         return 5000;
       },
-      async unzip(_src: string, _dst: string) {
-        return _dst;
-      },
-      subscribe() {
-        return { remove: () => {} };
-      },
     },
     async ensureDir() {},
     unzip,

@@ -103,7 +103,7 @@ describe("sync + media-cache cableados (B3-04)", () => {
       illustrationSha256: SHA_D,
     });
     mockSyncRoutes({
-      version: { contentVersion: "v1", serverTime: NOW },
+      version: { contentVersion: "1", serverTime: NOW },
       seedPages: [
         { words: [w1, w2], total: 2, totalPages: 1, serverTime: NOW },
       ],

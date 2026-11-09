@@ -1,11 +1,19 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import { openDatabaseSync } from "expo-sqlite";
+import { openDatabaseSync, type SQLiteDatabase } from "expo-sqlite";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system";
 import { SQLiteWordStore, type WordStore, type OutboxRow } from "./db/sqlite-store";
 import { SQLiteCourseStore, type CourseStore } from "./db/course-store";
-import type { SeedState } from "./db/seed-machine";
+import { seedReducer, type SeedEvent, type SeedState } from "./db/seed-machine";
+import { seedBaseUrl } from "./db/seed-download";
+import { runExpoSeedFlow, seedErrorCopy } from "./db/seed-expo";
+import {
+  getLocalVersion,
+  getRemoteVersion,
+  setLocalVersion,
+  compareVersions,
+} from "./db/version-gate";
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
 import { refreshMediaAfterSync } from "./db/sync-media";
@@ -61,16 +69,98 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const [historyWords, setHistoryWords] = useState<WordRow[]>([]);
   const [pendingOutboxCount, setPendingOutboxCount] = useState(0);
   const storeRef = useRef<WordStore | null>(null);
-  // W3 — la orquestación real (descarga/swap) se conecta en W3-06; acá
-  // solo el estado que consume la pantalla, con la apertura instantánea
-  // existente intacta como fallback.
+  const dbRef = useRef<SQLiteDatabase | null>(null);
+  // W3 — estado del seed ("Preparando contenido"). La apertura instantánea
+  // existente queda intacta como fallback; el chequeo del seed corre en
+  // segundo plano una vez abierto el store (efecto más abajo).
   const [seedState, setSeedState] = useState<SeedState | null>(null);
+  const seedRequestRef = useRef<{ baseUrl: string; remote: string; serverTime: string } | null>(
+    null
+  );
+  const seedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (seedTimerRef.current) clearTimeout(seedTimerRef.current);
+    },
+    []
+  );
+
+  const reopenStores = async (): Promise<WordStore> => {
+    try {
+      await dbRef.current?.closeAsync();
+    } catch {
+      // La conexión puede estar ya cerrada (swap a mitad de camino).
+    }
+    const db = openDatabaseSync("piiyaak.db");
+    dbRef.current = db;
+    const s = await SQLiteWordStore.open(db);
+    const cs = await SQLiteCourseStore.open(db);
+    storeRef.current = s;
+    setStore(s);
+    setCourseStore(cs);
+    setLastSync(await s.getLastSync());
+    return s;
+  };
+
+  /** Ejecuta el flujo §4.2–§4.5; el fallo se muestra, nunca se propaga. */
+  const runSeedInternal = async (baseUrl: string, remote: string, serverTime: string): Promise<void> => {
+    const documentDir = FileSystem.documentDirectory;
+    if (!documentDir) {
+      setSeedState(null);
+      return;
+    }
+    setSeedState({ status: "checking" });
+    const emit = (event: SeedEvent): void =>
+      setSeedState((prev) => (prev ? seedReducer(prev, event) : prev));
+    try {
+      await runExpoSeedFlow(
+        {
+          liveDbPath: `${documentDir}SQLite/piiyaak.db`,
+          getStore: () => storeRef.current,
+          closeLiveDb: async () => {
+            try {
+              await dbRef.current?.closeAsync();
+            } catch {
+              // Ya cerrada: el swap continúa.
+            }
+            dbRef.current = null;
+          },
+          reopenLiveDb: () => reopenStores(),
+          adoptVersion: async (v, t) => {
+            const current = storeRef.current;
+            if (!current) throw new Error("sin store tras reapertura");
+            await setLocalVersion(current, { contentVersion: v, serverTime: t });
+          },
+        },
+        documentDir,
+        { baseUrl, remote, serverTime, emit }
+      );
+      // `ready` = transición a la app normal con la db adoptada.
+      setSeedState({ status: "ready" });
+      if (seedTimerRef.current) clearTimeout(seedTimerRef.current);
+      seedTimerRef.current = setTimeout(() => setSeedState(null), 1200);
+    } catch (e) {
+      setSeedState({
+        status: "error",
+        message: seedErrorCopy(e),
+        canRetry: true,
+        textOnly: true,
+      });
+    }
+  };
 
   const retrySeed = async (): Promise<void> => {
-    setSeedState({ status: "checking" });
+    const req = seedRequestRef.current;
+    if (!req) {
+      setSeedState(null);
+      return;
+    }
+    await runSeedInternal(req.baseUrl, req.remote, req.serverTime);
   };
 
   const continueTextOnly = (): void => {
+    seedRequestRef.current = null;
     setSeedState(null);
   };
 
@@ -96,6 +186,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
         // Sin asset pre-poblado (Expo Go / dev): se siembra por red.
       }
       const db = openDatabaseSync("piiyaak.db");
+      dbRef.current = db;
       const s = await SQLiteWordStore.open(db);
       // Conexión única (B2): el store de cursos vive sobre la misma instancia
       // SQLiteDatabase, de modo que las transacciones de syncCourses son
@@ -124,6 +215,41 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, []);
+
+  // W3 — chequeo del seed en segundo plano tras la apertura instantánea.
+  // La db viva sigue sirviendo lectura; si el gate decide `seed`, el flujo
+  // §4.2–§4.5 corre con pantalla de progreso y swap atómico.
+  useEffect(() => {
+    if (!store) return;
+    let alive = true;
+    (async () => {
+      const baseUrl = seedBaseUrl();
+      if (!baseUrl) return;
+      let remote: { contentVersion: string; serverTime: string };
+      try {
+        const local = await getLocalVersion(storeRef.current ?? store);
+        remote = await getRemoteVersion(null);
+        const move = compareVersions(local.contentVersion, remote.contentVersion);
+        if (move.action === "skip") return;
+        if (move.action === "noop") {
+          console.warn(
+            `[seed] noop sin downgrade (D3): remote ${remote.contentVersion} < local ${local.contentVersion} — se mantiene local (${move.reason})`
+          );
+          return;
+        }
+        if (!alive) return;
+        seedRequestRef.current = { baseUrl, remote: move.remote, serverTime: remote.serverTime };
+        await runSeedInternal(baseUrl, move.remote, remote.serverTime);
+      } catch {
+        // Offline o gate inalcanzable: la app sigue con el texto local.
+        if (alive) setSeedState(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store]);
 
   // persist favorites to AsyncStorage
   useEffect(() => {
@@ -187,17 +313,27 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     setSyncing(true);
     setSyncProgress(null);
     try {
-      await syncNow(store, session, (done, total) => setSyncProgress({ done, total }));
+      const baseUrl = seedBaseUrl();
+      await syncNow(store, session, (done, total) => setSyncProgress({ done, total }), {
+        runSeed: baseUrl
+          ? async (remote, serverTime) => {
+              seedRequestRef.current = { baseUrl, remote, serverTime };
+              await runSeedInternal(baseUrl, remote, serverTime);
+            }
+          : undefined,
+      });
       // B3-04: poblado + poda solo tras sync exitosa (si `syncNow` lanza,
       // no se llega acá: nunca tras sync fallida). Best-effort: un fallo
       // de medios no revierte el sync; las favoritas nunca se podan.
+      // Tras un seed, el swap reemplazó los stores: se usa la ref vigente.
+      const current = storeRef.current ?? store;
       try {
-        await refreshMediaAfterSync(store, defaultMediaCache(), { favorites });
+        await refreshMediaAfterSync(current, defaultMediaCache(), { favorites });
       } catch {
         // best-effort: el diccionario ya sincronizó
       }
-      if (session) await flushOutbox(store, session).catch(() => {});
-      setLastSync(await store.getLastSync());
+      if (session) await flushOutbox(current, session).catch(() => {});
+      setLastSync(await current.getLastSync());
       await refreshPending();
     } finally {
       setSyncing(false);

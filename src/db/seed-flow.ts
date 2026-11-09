@@ -9,7 +9,7 @@
 import { downloadSeed, SeedDownloadError, type SeedDownloadDeps } from "./seed-download";
 import { verifySeedDir, SeedVerifyError } from "./seed-manifest";
 import { swapSeedContent, SeedSwapError, type SeedUserTable } from "./seed-swap";
-import { unzipSeed, type SeedUnzipApi } from "./seed-unzip";
+import { unzipSeed } from "./seed-unzip";
 import type { SeedEvent } from "./seed-machine";
 
 export interface SeedFlowTempDb {
@@ -29,7 +29,8 @@ export interface SeedFlowDeps {
   baseDir: string;
   liveDbPath: string;
   download: SeedDownloadDeps;
-  unzipApi: SeedUnzipApi;
+  /** Solo la guarda de espacio; la extracción va por `unzip` (con progreso). */
+  unzipApi: { getUncompressedSize(zipPath: string): Promise<number> };
   ensureDir(dirUri: string): Promise<void>;
   unzip(zipUri: string, targetDir: string): Promise<void>;
   readFileInfo(uri: string): Promise<{ exists: boolean; size: number | null }>;
