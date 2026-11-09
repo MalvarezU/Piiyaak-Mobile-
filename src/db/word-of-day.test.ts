@@ -96,13 +96,25 @@ describe("loadWordOfDay", () => {
   it("con sesión resuelve sin contaminar outbox local (historial servidor vía ficha)", async () => {
     const store = new MemoryWordStore();
     await store.upsertWords([word("w1")]);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ word: { id: "w1" } }) } as unknown as Response))
-    );
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ word: { id: "w1" } }),
+    } as unknown as Response));
+    vi.stubGlobal("fetch", fetchMock);
     const w = await loadWordOfDay(store, "2026-11-09", session);
     expect(w?.id).toBe("w1");
     expect((await store.pendingOutbox()).length).toBe(0);
+    // Ruta autenticada: la lectura lleva Cookie (el servidor atribuye la
+    // vista y ficha la registra vía pushHistory; nada queda en outbox).
+    const wodCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/api/dictionary/word-of-day")
+    );
+    expect(wodCall).toBeDefined();
+    expect(
+      (wodCall![1]?.headers as unknown as Headers).get?.("Cookie") ??
+        (wodCall![1]?.headers as Record<string, string>)["Cookie"]
+    ).toBe(session.cookie);
   });
 
   it("offline con caché vigente devuelve la palabra cacheada", async () => {
