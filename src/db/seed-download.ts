@@ -26,11 +26,37 @@ export class SeedDownloadError extends Error {
   }
 }
 
-/** Registro kv `piiyaak:seedDownload:<N>` (spec §4.3). */
+/** Registro kv `piiyaak:seedDownload:<N>` (spec §4.3 + W3.1). */
 export interface SeedDownloadRecord {
   partName: string;
   totalBytes: number;
   updatedAt: string;
+  /**
+   * Opaco de `savable()` (spec §W3.1.1): se persiste tal cual y se
+   * entrega tal cual a `createDownloadResumable`. Nunca se construye
+   * a mano ni se interpreta. Ausente/`null` en registros anteriores
+   * a W3 → se lee como `null` (re-descarga limpia).
+   */
+  resumeData?: string | null;
+}
+
+/**
+ * Normaliza un registro leído del kv: compat con registros antiguos
+ * (sin `resumeData` → `null`) y rechazo de formas rotas (`null`).
+ * El opaco viaja intacto, byte a byte, sin parseo ni normalización.
+ */
+export function normalizeSeedRecord(raw: unknown): SeedDownloadRecord | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.partName !== "string" || typeof r.totalBytes !== "number") {
+    return null;
+  }
+  return {
+    partName: r.partName,
+    totalBytes: r.totalBytes,
+    updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : "",
+    resumeData: typeof r.resumeData === "string" ? r.resumeData : null,
+  };
 }
 
 export interface SeedDownloadDeps {
@@ -47,6 +73,23 @@ export interface SeedDownloadDeps {
   ): Promise<void>;
   readRecord(remote: string): Promise<SeedDownloadRecord | null>;
   writeRecord(remote: string, record: SeedDownloadRecord): Promise<void>;
+  /**
+   * W3 (opcionales; solo dispositivo/Nativo cuando existen):
+   * - `sleep`: espera entre reintentos (inyectable para tests).
+   * - `listPartUris`: `.part` visibles en `tmpDir` (sweep de ajenos).
+   * - `pauseAndSavable`: `pauseAsync()` + `savable()` del task vivo.
+   * - `resumeDownload`: `createDownloadResumable(..., resumeData)` +
+   *   `resumeAsync()`; resuelve el status HTTP (guarda 206 en W3.3).
+   */
+  sleep?(ms: number): Promise<void>;
+  listPartUris?(): Promise<string[]>;
+  pauseAndSavable?(): Promise<string | null>;
+  resumeDownload?(
+    url: string,
+    partUri: string,
+    resumeData: string,
+    onProgress: (receivedBytes: number, totalBytes: number) => void
+  ): Promise<{ status: number }>;
 }
 
 export interface SeedDownloadResult {
@@ -119,7 +162,31 @@ export async function downloadSeed(
   }
 
   const partUri = `${deps.tmpDir}seed-${remote}.zip.part`;
+
+  // W3.1.3: el `.part` de otra versión nunca se reanuda (la clave kv y el
+  // nombre del archivo llevan la versión); se barre por higiene de disco.
+  // Solo cuando el adaptador expone el listado (dispositivo y fakes nuevos).
+  if (deps.listPartUris) {
+    const visible = await deps.listPartUris();
+    for (const uri of visible) {
+      if (uri !== partUri && uri.endsWith(".zip.part")) {
+        await deps.removeFile(uri);
+      }
+    }
+  }
+
   const record = await deps.readRecord(remote);
+  const consistent =
+    record !== null &&
+    record.partName === `seed-${remote}.zip.part` &&
+    record.totalBytes === manifest.zipBytes;
+  // Registro antiguo (sin `resumeData`) o inconsistente → `null`: la
+  // decisión savable nace en `fresh`; el camino offset heredado sigue
+  // vigente más abajo y preserva los tests existentes.
+  const resumeData =
+    record !== null && consistent && typeof record.resumeData === "string"
+      ? record.resumeData
+      : null;
   const existing = await deps.partialSize(partUri);
   const resumable =
     record !== null &&
@@ -141,6 +208,9 @@ export async function downloadSeed(
     partName: `seed-${remote}.zip.part`,
     totalBytes: manifest.zipBytes,
     updatedAt: new Date().toISOString(),
+    // El opaco heredado se preserva para un futuro intento savable;
+    // en descarga fresca nace `null`.
+    resumeData,
   });
 
   try {

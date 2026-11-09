@@ -4,13 +4,10 @@
  * Sin imports `expo-*`: testeable en Node. El `resumeData` es opaco
  * (nunca se interpreta; solo se verifica presencia/ausencia).
  */
-export interface ResumeRecord {
-  resumeData: string | null;
-  totalBytes: number;
-}
+import type { SeedDownloadRecord } from "./seed-download";
 
 export interface ResumeInput {
-  record: ResumeRecord | null;
+  record: SeedDownloadRecord | null;
   /** Tamaño actual del `.part` (`partialSize`); `null` = no existe. */
   existingBytes: number | null;
   /** HEAD `accept-ranges: bytes` (vigente). */
