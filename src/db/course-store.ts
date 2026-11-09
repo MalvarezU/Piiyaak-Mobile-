@@ -5,6 +5,13 @@ export interface CourseStore {
   upsertCourse(course: CourseRow): Promise<void>;
   upsertModule(mod: ModuleRow): Promise<void>;
   upsertLesson(lesson: LessonRow): Promise<void>;
+  removeCourse(id: string): Promise<void>;
+  removeModule(id: string): Promise<void>;
+  removeLesson(id: string): Promise<void>;
+  listCourseIds(): Promise<string[]>;
+  listModuleIds(courseId: string): Promise<string[]>;
+  listLessonIds(moduleId: string): Promise<string[]>;
+  runInTransaction<T>(fn: () => Promise<T>): Promise<T>;
   getCourses(): Promise<CourseRow[]>;
   getCourse(id: string): Promise<CourseRow | null>;
   getModules(courseId: string): Promise<ModuleRow[]>;
@@ -20,6 +27,12 @@ export class SQLiteCourseStore implements CourseStore {
   constructor(private db: SQLiteDatabase) {}
 
   static async open(db: SQLiteDatabase): Promise<SQLiteCourseStore> {
+    // Las FK con ON DELETE CASCADE solo son efectivas con foreign_keys=ON
+    // (SQLite lo trae OFF por defecto). Se habilita por conexión; como B2
+    // unifica a una sola conexión, basta con fijarlo aquí. Los borrados de
+    // remove* son explícitos bottom-up de todos modos (course_progress no
+    // tiene CASCADE), así que el PRAGMA es defensa en profundidad.
+    await db.execAsync("PRAGMA foreign_keys = ON");
     return new SQLiteCourseStore(db);
   }
 
@@ -110,6 +123,76 @@ export class SQLiteCourseStore implements CourseStore {
     return { lessonId: row.lessonId, completed: !!row.completed, score: row.score, lastVisitedAt: row.lastVisitedAt, completedAt: row.completedAt };
   }
 
+  async runInTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    // BEGIN IMMEDIATE: adquiere el lock de escritura al entrar (nunca DEFERRED,
+    // que arriesga SQLITE_BUSY silencioso ante lecturas del hilo de UI).
+    await this.db.execAsync("BEGIN IMMEDIATE");
+    try {
+      const result = await fn();
+      await this.db.execAsync("COMMIT");
+      return result;
+    } catch (err) {
+      try {
+        await this.db.execAsync("ROLLBACK");
+      } catch {
+        // ROLLBACK best-effort: la excepción original es la que se relanza.
+      }
+      throw err;
+    }
+  }
+
+  async removeCourse(id: string): Promise<void> {
+    // Borrado explícito bottom-up dentro de la tx del llamador: course_progress
+    // no tiene ON DELETE CASCADE (las FK solo cubren modules/lessons).
+    const mods = await this.db.getAllAsync<{ id: string }>(
+      "SELECT id FROM modules WHERE courseId = ?",
+      [id]
+    );
+    for (const m of mods) {
+      await this.removeModule(m.id);
+    }
+    await this.db.runAsync("DELETE FROM courses WHERE id = ?", [id]);
+  }
+
+  async removeModule(id: string): Promise<void> {
+    const lessons = await this.db.getAllAsync<{ id: string }>(
+      "SELECT id FROM lessons WHERE moduleId = ?",
+      [id]
+    );
+    for (const l of lessons) {
+      await this.removeLesson(l.id);
+    }
+    await this.db.runAsync("DELETE FROM modules WHERE id = ?", [id]);
+  }
+
+  async removeLesson(id: string): Promise<void> {
+    await this.db.runAsync("DELETE FROM course_progress WHERE lessonId = ?", [id]);
+    await this.db.runAsync("DELETE FROM lessons WHERE id = ?", [id]);
+  }
+
+  async listCourseIds(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ id: string }>(
+      "SELECT id FROM courses"
+    );
+    return rows.map((r) => r.id);
+  }
+
+  async listModuleIds(courseId: string): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ id: string }>(
+      "SELECT id FROM modules WHERE courseId = ?",
+      [courseId]
+    );
+    return rows.map((r) => r.id);
+  }
+
+  async listLessonIds(moduleId: string): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ id: string }>(
+      "SELECT id FROM lessons WHERE moduleId = ?",
+      [moduleId]
+    );
+    return rows.map((r) => r.id);
+  }
+
   async getAllProgress(): Promise<CourseProgressRow[]> {
     const rows = await this.db.getAllAsync<any>("SELECT * FROM course_progress");
     return rows.map((r) => ({ lessonId: r.lessonId, completed: !!r.completed, score: r.score, lastVisitedAt: r.lastVisitedAt, completedAt: r.completedAt }));
@@ -144,4 +227,52 @@ export class MemoryCourseStore implements CourseStore {
   async getProgress(lessonId: string): Promise<CourseProgressRow | null> { return this.progress.get(lessonId) ?? null; }
   async getAllProgress(): Promise<CourseProgressRow[]> { return [...this.progress.values()]; }
   async clearCourses(): Promise<void> { this.courses.clear(); this.modules.clear(); this.lessons.clear(); }
+
+  async runInTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    // Rollback por snapshot: copia de los mapas al entrar; ante excepción,
+    // restaura y relanza la excepción original (semántica exigida §1.2).
+    const snapshot = {
+      courses: new Map(this.courses),
+      modules: new Map(this.modules),
+      lessons: new Map(this.lessons),
+      progress: new Map(this.progress),
+    };
+    try {
+      return await fn();
+    } catch (err) {
+      this.courses = snapshot.courses;
+      this.modules = snapshot.modules;
+      this.lessons = snapshot.lessons;
+      this.progress = snapshot.progress;
+      throw err;
+    }
+  }
+
+  async removeCourse(id: string): Promise<void> {
+    // Cascada en memoria (espeja SQLite + borrado explícito de progreso).
+    for (const m of [...this.modules.values()]) {
+      if (m.courseId === id) await this.removeModule(m.id);
+    }
+    this.courses.delete(id);
+  }
+
+  async removeModule(id: string): Promise<void> {
+    for (const l of [...this.lessons.values()]) {
+      if (l.moduleId === id) await this.removeLesson(l.id);
+    }
+    this.modules.delete(id);
+  }
+
+  async removeLesson(id: string): Promise<void> {
+    this.progress.delete(id);
+    this.lessons.delete(id);
+  }
+
+  async listCourseIds(): Promise<string[]> { return [...this.courses.keys()]; }
+  async listModuleIds(courseId: string): Promise<string[]> {
+    return [...this.modules.values()].filter((m) => m.courseId === courseId).map((m) => m.id);
+  }
+  async listLessonIds(moduleId: string): Promise<string[]> {
+    return [...this.lessons.values()].filter((l) => l.moduleId === moduleId).map((l) => l.id);
+  }
 }
