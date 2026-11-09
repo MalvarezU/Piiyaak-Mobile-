@@ -242,6 +242,68 @@ describe("syncNow gate de versión (B1)", () => {
   });
 });
 
+describe("arranque offline (B1)", () => {
+  const NOW = "2026-11-09T00:00:00.000Z";
+  const word = (id: string, spanish: string): WordRow => ({
+    id,
+    spanish,
+    nasaYuwe: `ny-${id}`,
+    pronunciation: null,
+    audioUrl: null,
+    illustrationUrl: null,
+    culturalContext: null,
+    category: "frutas",
+    examples: null,
+    status: "PUBLISHED",
+    updatedAt: NOW,
+  });
+
+  it("arranque offline con fetch bloqueado resuelve bundle sin red de sync", async () => {
+    const store = new MemoryWordStore();
+    await store.upsertWords([word("w1", "mango"), word("w2", "piña")]);
+    await store.setLastSync(NOW);
+    await store.setKV("piiyaak:contentVersion", "v7");
+    const fetchMock = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    // Gate intenta versión, falla, y resuelve local sin lanzar:
+    const res = await syncNow(store, null);
+    expect(res).toMatchObject({ applied: 0, removed: 0 });
+    const calls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes("/api/sync/seed") || u.includes("/api/sync?"))).toBe(false);
+    // El bundle sirve lectura local:
+    expect((await store.search("man")).map((w) => w.id)).toEqual(["w1"]);
+    expect((await store.listAZ()).length).toBe(2);
+    expect(await store.listCategories()).toEqual(["frutas"]);
+  });
+
+  it("bundle con lastSync sin prefijo dispara sync (regresión R3)", async () => {
+    const store = new MemoryWordStore();
+    await store.upsertWords([word("w1", "mango")]);
+    // Siembra heredada con clave sin prefijo: el gate no la reconoce.
+    await store.setKV("lastSync", NOW);
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        seen.push(url);
+        if (url.includes("/api/sync/version")) {
+          return { ok: true, status: 200, json: async () => ({ contentVersion: "v9", serverTime: NOW }) } as unknown as Response;
+        }
+        if (url.includes("/api/sync/seed")) {
+          return { ok: true, status: 200, json: async () => ({ words: [], total: 0, totalPages: 0, serverTime: NOW }) } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({ words: [], removedIds: [], serverTime: NOW, nextCursor: null }) } as unknown as Response;
+      })
+    );
+    await syncNow(store, null);
+    // El gate no ve ni contentVersion ni lastSync con prefijo → sincroniza.
+    expect(seen.some((u) => u.includes("/api/sync/seed") || u.includes("/api/sync?"))).toBe(true);
+    expect(await store.getKV("piiyaak:contentVersion")).toBe("v9");
+  });
+});
+
 describe("flushOutbox", () => {
   it("does nothing without session", async () => {
     const store = new MemoryWordStore();

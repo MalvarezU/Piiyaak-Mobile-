@@ -74,6 +74,16 @@ CREATE TABLE IF NOT EXISTS history (
   wordId TEXT PRIMARY KEY,
   viewedAt TEXT NOT NULL
 );
+-- v4 (B1, aditiva): manifiesto de medios (poblado en B3). Sin DELETE:
+-- las tablas words/courses/history/kv/outbox se preservan intactas.
+CREATE TABLE IF NOT EXISTS media_manifest (
+  word_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('audio','illustration')),
+  url TEXT NOT NULL,
+  sha256 TEXT,
+  local_uri TEXT NOT NULL,
+  PRIMARY KEY (word_id, kind)
+);
 `;
 
 export interface OutboxRow {
@@ -120,7 +130,8 @@ export class AsyncStorageKV implements KeyValue {
 }
 
 const LAST_SYNC_KEY = "piiyaak:lastSync";
-const SCHEMA_VERSION = "3";
+/** Versión de esquema (B1): "4" con tabla media_manifest aditiva. */
+export const SCHEMA_VERSION = "4";
 
 export class SQLiteWordStore implements WordStore {
   constructor(private db: SQLiteDatabase) {}

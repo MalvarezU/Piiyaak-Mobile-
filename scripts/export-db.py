@@ -100,6 +100,22 @@ def login():
 def fetch_seed(cookie):
     words = []
     server_time = None
+    content_version = None
+    # Versión de contenido del bundle (B1): gate por igualdad exacta.
+    # Endpoint público; el cookie se envía igual por si el backend lo exige.
+    try:
+        status, _headers, body = http("GET", "/api/sync/version", cookie=cookie)
+        if status == 200:
+            data = json.loads(body)
+            if isinstance(data.get("contentVersion"), str) and data["contentVersion"]:
+                content_version = data["contentVersion"]
+                print(f"  contentVersion remota: {content_version}")
+            else:
+                print("  /api/sync/version sin contentVersion; el bundle quedará sin gate inicial.")
+        else:
+            print(f"  /api/sync/version -> {status}; el bundle quedará sin gate inicial.")
+    except Exception as e:
+        print(f"  no se pudo leer /api/sync/version ({e}); el bundle quedará sin gate inicial.")
     page = 1
     total_pages = 1
     while page <= total_pages:
@@ -113,13 +129,13 @@ def fetch_seed(cookie):
         server_time = data.get("serverTime")
         print(f"  página {page}/{total_pages}: +{len(data.get('words', []))} (total {len(words)})")
         page += 1
-    return words, server_time
+    return words, server_time, content_version
 
 
 def main():
     cookie = login()
     print("Descargando seed...")
-    words, server_time = fetch_seed(cookie)
+    words, server_time, content_version = fetch_seed(cookie)
     print(f"Total palabras: {len(words)}")
 
     out = os.path.abspath(OUT_PATH)
@@ -151,8 +167,13 @@ def main():
             ),
         )
     if server_time:
-        conn.execute("INSERT INTO kv (key, value) VALUES (?, ?)", ("lastSync", server_time))
-        conn.execute("INSERT INTO kv (key, value) VALUES (?, ?)", ("schemaVersion", "3"))
+        # Claves unificadas con prefijo (B1/R3): el gate las lee con prefijo.
+        conn.execute("INSERT INTO kv (key, value) VALUES (?, ?)", ("piiyaak:lastSync", server_time))
+        if content_version:
+            conn.execute("INSERT INTO kv (key, value) VALUES (?, ?)", ("piiyaak:contentVersion", content_version))
+        else:
+            print("ADVERTENCIA: bundle sin piiyaak:contentVersion; la app hará una sync completa inicial.")
+        conn.execute("INSERT INTO kv (key, value) VALUES (?, ?)", ("schemaVersion", "4"))
     conn.commit()
     conn.close()
     print(f"Escrito: {out} ({len(words)} palabras)")
