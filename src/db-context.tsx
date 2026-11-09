@@ -7,6 +7,8 @@ import { SQLiteWordStore, type WordStore, type OutboxRow } from "./db/sqlite-sto
 import { SQLiteCourseStore, type CourseStore } from "./db/course-store";
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
+import { refreshMediaAfterSync } from "./db/sync-media";
+import { defaultMediaCache } from "./db/media-fs";
 import { useAuth } from "./auth";
 import { apiFetch } from "./api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -169,6 +171,14 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     setSyncProgress(null);
     try {
       await syncNow(store, session, (done, total) => setSyncProgress({ done, total }));
+      // B3-04: poblado + poda solo tras sync exitosa (si `syncNow` lanza,
+      // no se llega acá: nunca tras sync fallida). Best-effort: un fallo
+      // de medios no revierte el sync; las favoritas nunca se podan.
+      try {
+        await refreshMediaAfterSync(store, defaultMediaCache(), { favorites });
+      } catch {
+        // best-effort: el diccionario ya sincronizó
+      }
       if (session) await flushOutbox(store, session).catch(() => {});
       setLastSync(await store.getLastSync());
       await refreshPending();
