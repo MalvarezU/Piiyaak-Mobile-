@@ -6,11 +6,12 @@ import { useAuth } from "../auth";
 import { theme } from "../theme";
 import { EmptyState } from "../components/empty-state";
 import { SeedProgress } from "../components/seed-progress";
+import { UpdateNotice } from "../components/update-notice";
 import type { WordRow } from "../db/types";
 import { loadWordOfDay } from "../db/word-of-day";
 
 export default function Buscar() {
-  const { store, ready, sync, seedState, retrySeed, continueTextOnly } = useDb();
+  const { store, ready, sync, seedState, retrySeed, continueTextOnly, updateAvailable, acceptUpdate, dismissUpdate } = useDb();
   const { session } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -81,6 +82,15 @@ export default function Buscar() {
         onChangeText={setQ}
         autoCapitalize="none"
       />
+      {updateAvailable ? (
+        <UpdateNotice
+          update={updateAvailable}
+          onDownload={() => {
+            void acceptUpdate();
+          }}
+          onLater={dismissUpdate}
+        />
+      ) : null}
       {seedState ? (
         <SeedProgress state={seedState} onRetry={retrySeed} onTextOnly={continueTextOnly} />
       ) : !ready ? (
