@@ -35,6 +35,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "6996fb58-882e-42e4-af3e-d36d6b5833d6"
+      }
+    },
+    "owner": "marioalvarezco"
   }
 }
