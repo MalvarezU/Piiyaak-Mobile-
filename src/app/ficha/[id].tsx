@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native";
-import { Audio } from "expo-av";
 import { useLocalSearchParams } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme } from "../../theme";
 import type { WordRow } from "../../db/types";
+import { createAudioPlayer, type AudioPlayer } from "../../audio-player";
 import { resolveAudioUri } from "../../audio";
 import { resolveIllustrationUri } from "../../illustrations";
 import { WordIllustration } from "../../components/word-illustration";
@@ -16,7 +16,20 @@ export default function Ficha() {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [illustrationSrc, setIllustrationSrc] = useState<string | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
+  const loadedRef = useRef(false);
+
+  const getPlayer = (): AudioPlayer => {
+    if (!playerRef.current) playerRef.current = createAudioPlayer();
+    return playerRef.current;
+  };
+
+  const unloadPlayer = () => {
+    loadedRef.current = false;
+    setPlaying(false);
+    const player = playerRef.current;
+    if (player) player.unload().catch(() => {});
+  };
 
   useEffect(() => {
     let alive = true;
@@ -36,11 +49,9 @@ export default function Ficha() {
 
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
+      unloadPlayer();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -68,12 +79,9 @@ export default function Ficha() {
   // unload sound when word changes
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-        setPlaying(false);
-      }
+      unloadPlayer();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   if (!word) {
@@ -88,12 +96,13 @@ export default function Ficha() {
 
   const togglePlay = async () => {
     if (!word.audioUrl || loading) return;
-    if (soundRef.current) {
+    const player = getPlayer();
+    if (loadedRef.current) {
       if (playing) {
-        await soundRef.current.pauseAsync();
+        await player.pause();
         setPlaying(false);
       } else {
-        await soundRef.current.playAsync();
+        await player.play();
         setPlaying(true);
       }
       return;
@@ -105,16 +114,9 @@ export default function Ficha() {
         audioUrl: word.audioUrl,
         audioSha256: word.audioSha256 ?? null,
       });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true },
-        (status: { isLoaded: boolean; didJustFinish?: boolean }) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setPlaying(false);
-          }
-        }
-      );
-      soundRef.current = sound;
+      await player.load(uri, () => setPlaying(false));
+      loadedRef.current = true;
+      await player.play();
       setPlaying(true);
     } catch {
       // ignore

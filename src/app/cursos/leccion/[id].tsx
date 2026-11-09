@@ -1,30 +1,31 @@
-import { useEffect, useState } from "react";
-import { Audio } from "expo-av";
+import { useEffect, useRef, useState } from "react";
+import { createAudioPlayer, type AudioPlayer } from "../../../audio-player";
 import { QuizBlock } from "../../../components/quiz-block";
 import { RichTextBlock } from "../../../components/rich-text-block";
 
 function ListeningPlayer({ url }: { url: string }) {
   const [playing, setPlaying] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
+  const loadedRef = useRef(false);
 
   const toggle = async () => {
-    if (sound) {
+    if (!playerRef.current) playerRef.current = createAudioPlayer();
+    const player = playerRef.current;
+    if (loadedRef.current) {
       if (playing) {
-        await sound.pauseAsync();
+        await player.pause();
         setPlaying(false);
       } else {
-        await sound.playAsync();
+        await player.play();
         setPlaying(true);
       }
       return;
     }
     try {
-      const { sound: s } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
-      setSound(s);
+      await player.load(url, () => setPlaying(false));
+      loadedRef.current = true;
+      await player.play();
       setPlaying(true);
-      s.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) setPlaying(false);
-      });
     } catch {
       // ignore
     }
@@ -32,9 +33,10 @@ function ListeningPlayer({ url }: { url: string }) {
 
   useEffect(() => {
     return () => {
-      sound?.unloadAsync().catch(() => {});
+      loadedRef.current = false;
+      playerRef.current?.unload().catch(() => {});
     };
-  }, [sound]);
+  }, []);
 
   return (
     <TouchableOpacity style={styles.audioBtn} onPress={toggle}>
