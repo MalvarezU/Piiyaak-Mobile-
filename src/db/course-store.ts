@@ -20,6 +20,10 @@ export interface CourseStore {
   setProgress(lessonId: string, completed: boolean, score?: number | null): Promise<void>;
   getProgress(lessonId: string): Promise<CourseProgressRow | null>;
   getAllProgress(): Promise<CourseProgressRow[]>;
+  /**
+   * @deprecated Prohibido en rutas de sync (B2 §1.2): no es transaccional ni
+   * limpia `course_progress`. Solo para tests/migraciones puntuales.
+   */
   clearCourses(): Promise<void>;
 }
 
