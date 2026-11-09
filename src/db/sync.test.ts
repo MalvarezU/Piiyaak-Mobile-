@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MemoryWordStore } from "./memory-store";
 import { incrementalSync, fullSeed, syncNow, flushOutbox, AuthError } from "./sync";
+import { syncCourses } from "./sync-courses";
+import { MemoryCourseStore } from "./course-store";
 import type { WordRow } from "./types";
 import type { SessionState } from "../api";
 
@@ -301,6 +303,81 @@ describe("arranque offline (B1)", () => {
     // El gate no ve ni contentVersion ni lastSync con prefijo → sincroniza.
     expect(seen.some((u) => u.includes("/api/sync/seed") || u.includes("/api/sync?"))).toBe(true);
     expect(await store.getKV("piiyaak:contentVersion")).toBe("v9");
+  });
+});
+
+describe("lectura sin sesión (B1)", () => {
+  const NOW = "2026-11-09T00:00:00.000Z";
+
+  function headerOf(call: unknown): Headers {
+    const [, init] = call as [string, RequestInit];
+    return new Headers(init?.headers);
+  }
+
+  it("incremental con authToken null completa sin encabezados de auth", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("/api/sync/version")) {
+        return { ok: true, status: 200, json: async () => ({ contentVersion: "v1", serverTime: NOW }) } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ words: [], removedIds: [], serverTime: NOW, nextCursor: null }),
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new MemoryWordStore();
+    await store.upsertWords([{
+      id: "w1", spanish: "a", nasaYuwe: "b", pronunciation: null, audioUrl: null,
+      illustrationUrl: null, culturalContext: null, category: null, examples: null,
+      status: "PUBLISHED", updatedAt: NOW,
+    }]);
+    await store.setLastSync("2026-01-01T00:00:00.000Z");
+    const res = await incrementalSync(store, null);
+    expect(res).toMatchObject({ applied: 0, removed: 0 });
+    expect(fetchMock).toHaveBeenCalled();
+    for (const call of fetchMock.mock.calls) {
+      const h = headerOf(call);
+      expect(h.get("Cookie")).toBeNull();
+      expect(h.get("Authorization")).toBeNull();
+    }
+  });
+
+  it("syncCourses con authToken null no envía Authorization y completa", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/api/courses")) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            courses: [{ id: "c1", title: "Curso", description: null, status: "PUBLISHED", coverImage: null, modules: 1, lessons: 1, progressPct: null }],
+          }),
+        } as unknown as Response;
+      }
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          course: { modules: [{ id: "m1", title: "M1", order: 0, lessons: [{ id: "l1", title: "L1", order: 0, lessonNumber: 1, content: {} }] }] },
+        }),
+      } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const store = new MemoryCourseStore();
+    const res = await syncCourses(store, null);
+    expect(res).toEqual({ courses: 1, modules: 1, lessons: 1 });
+    expect(fetchMock).toHaveBeenCalled();
+    for (const call of fetchMock.mock.calls) {
+      const h = headerOf(call);
+      expect(h.get("Cookie")).toBeNull();
+      expect(h.get("Authorization")).toBeNull();
+    }
+    expect(await store.getCourse("c1")).not.toBeNull();
+  });
+
+  it("flushOutbox conserva su guarda sin sesión (no-regresión)", async () => {
+    const store = new MemoryWordStore();
+    await store.addOutbox("favorite", "favorite.add", JSON.stringify({ wordId: "w1" }));
+    await flushOutbox(store, null);
+    expect((await store.pendingOutbox()).length).toBe(1);
   });
 });
 
