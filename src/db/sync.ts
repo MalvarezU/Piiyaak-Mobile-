@@ -6,6 +6,16 @@ import {
   getRemoteVersion,
   setLocalVersion,
 } from "./version-gate";
+import {
+  collapseOutboxForDrain,
+  favoriteWordId,
+} from "./outbox";
+
+export {
+  OUTBOX_MAX_PENDING,
+  OUTBOX_PAYLOAD_MAX_BYTES,
+  OutboxLimitError,
+} from "./outbox";
 
 export class AuthError extends Error {
   constructor(message = "auth required") {
@@ -172,8 +182,13 @@ export async function flushOutbox(
   session: SessionState | null
 ): Promise<void> {
   if (!session) return;
+  // FIFO (pendingOutbox ordena por id ascendente) con colapso por clave:
+  // las favoritas intermedias del mismo wordId se subsumen en la última
+  // (spec §4.3); historial y progreso van íntegros.
   const pending: OutboxRow[] = await store.pendingOutbox();
-  for (const row of pending) {
+  const { toSend, subsumedIds } = collapseOutboxForDrain(pending);
+  const subsumed = new Set(subsumedIds);
+  for (const row of toSend) {
     try {
       let ok = false;
       if (row.entity === "favorite") {
@@ -193,7 +208,25 @@ export async function flushOutbox(
       } else {
         ok = true;
       }
-      if (ok) await store.markOutboxSynced(row.id);
+      if (ok) {
+        await store.markOutboxSynced(row.id);
+        // Convergencia: las intermedias subsumidas del mismo wordId quedan
+        // confirmadas por el `ok` de la superviviente (su efecto está
+        // incluido en la última operación enviada).
+        if (row.entity === "favorite") {
+          const wordId = favoriteWordId(row);
+          if (wordId !== null) {
+            for (const other of pending) {
+              if (
+                subsumed.has(other.id) &&
+                favoriteWordId(other) === wordId
+              ) {
+                await store.markOutboxSynced(other.id);
+              }
+            }
+          }
+        }
+      }
     } catch (e) {
       if (e instanceof AuthError) throw e;
       // leave pending for next attempt

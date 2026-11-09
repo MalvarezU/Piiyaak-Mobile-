@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from "expo-sqlite";
 import { normalize } from "../normalize";
 import type { WordRow } from "./types";
 import type { MediaManifestRow, MediaKind } from "./media-cache";
+import { checkOutboxCapacity, checkOutboxPayloadSize } from "./outbox";
 
 /**
  * Capa SQLite local (B3.3): snapshot + deltas del contrato /api/sync.
@@ -278,6 +279,11 @@ export class SQLiteWordStore implements WordStore {
   }
 
   async addOutbox(entity: string, op: string, payload: string): Promise<void> {
+    checkOutboxPayloadSize(payload);
+    const count = await this.db.getFirstAsync<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM outbox WHERE syncedAt IS NULL"
+    );
+    checkOutboxCapacity(count?.n ?? 0);
     await this.db.runAsync(
       "INSERT INTO outbox (entity, op, payload, createdAt) VALUES (?,?,?,?)",
       [entity, op, payload, new Date().toISOString()]

@@ -2,6 +2,7 @@ import type { WordRow } from "./types";
 import type { WordStore } from "./sqlite-store";
 import type { MediaManifestRow, MediaKind } from "./media-cache";
 import { manifestKey } from "./media-cache";
+import { checkOutboxCapacity, checkOutboxPayloadSize } from "./outbox";
 import { normalize } from "../normalize";
 
 /**
@@ -85,6 +86,8 @@ export class MemoryWordStore implements WordStore {
   private nextOutboxId = 1;
 
   async addOutbox(entity: string, op: string, payload: string): Promise<void> {
+    checkOutboxPayloadSize(payload);
+    checkOutboxCapacity(this.outbox.filter((r) => r.syncedAt === null).length);
     this.outbox.push({ id: this.nextOutboxId++, entity, op, payload, createdAt: new Date().toISOString(), syncedAt: null });
   }
 
