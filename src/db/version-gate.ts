@@ -12,10 +12,45 @@ export interface VersionInfo {
 }
 
 export const VersionResponseSchema = z.object({
-  contentVersion: z.string().min(1),
+  // F0 — borde tolerante, escritura canónica: acepta el string canónico
+  // (`/^\d+$/`) o el number legacy y normaliza siempre a string. Lo que se
+  // persiste en kv es el resultado de este transform, nunca el raw.
+  contentVersion: z
+    .union([z.string().regex(/^\d+$/), z.number().int().nonnegative()])
+    .transform((v) => String(v)),
   serverTime: z.string().datetime(),
 });
 export type VersionResponse = z.infer<typeof VersionResponseSchema>;
+
+/**
+ * F0 — comparador solo-adelante (spec §1.3, implementado en W3 §4.6).
+ * Igualdad sobre el string canónico; orden sobre parseInt validado.
+ * `remote < local` es no-op (D3): el llamador mantiene local y emite el
+ * warn estructurado; esta función solo clasifica, nunca escribe.
+ */
+export type VersionMove =
+  | { action: "skip" } // remote == local
+  | { action: "seed"; remote: string } // remote > local, o local ausente/inválido
+  | { action: "noop"; reason: string }; // remote < local
+
+const CANONICAL_VERSION = /^\d+$/;
+
+export function compareVersions(local: string | null, remote: string): VersionMove {
+  if (!CANONICAL_VERSION.test(remote)) {
+    throw new Error(`[version-gate] remote ilegible: ${JSON.stringify(remote)}`);
+  }
+  if (local === null || !CANONICAL_VERSION.test(local)) {
+    return { action: "seed", remote };
+  }
+  if (local === remote) return { action: "skip" };
+  if (parseInt(remote, 10) < parseInt(local, 10)) {
+    return {
+      action: "noop",
+      reason: `remote ${remote} < local ${local}: sin downgrade (D3), se mantiene local`,
+    };
+  }
+  return { action: "seed", remote };
+}
 
 /**
  * Lee la versión remota sin exigir sesión: con `null` se omite el

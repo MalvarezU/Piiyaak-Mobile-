@@ -114,7 +114,7 @@ describe("syncNow", () => {
   it("calls fullSeed when no data", async () => {
     const now = new Date().toISOString();
     mockFetch([
-      { status: 200, body: { contentVersion: "v1", serverTime: now } },
+      { status: 200, body: { contentVersion: "1", serverTime: now } },
       { status: 200, body: { words: [], total: 0, totalPages: 0, serverTime: now } },
     ]);
     const store = new MemoryWordStore();
@@ -181,8 +181,8 @@ describe("syncNow gate de versión (B1)", () => {
   }
 
   it("versión igual omite /api/sync y /api/sync/seed", async () => {
-    const store = await seededStore("v1", NOW);
-    const { calls } = mockGateRoutes({ version: { contentVersion: "v1", serverTime: NOW } });
+    const store = await seededStore("1", NOW);
+    const { calls } = mockGateRoutes({ version: { contentVersion: "1", serverTime: NOW } });
     const res = await syncNow(store, null);
     expect(res).toMatchObject({ applied: 0, removed: 0, hasMore: false });
     expect(calls).toHaveLength(1);
@@ -190,35 +190,35 @@ describe("syncNow gate de versión (B1)", () => {
   });
 
   it("versión distinta sincroniza y actualiza ambas claves", async () => {
-    const store = await seededStore("v1", "2026-01-01T00:00:00.000Z");
+    const store = await seededStore("1", "2026-01-01T00:00:00.000Z");
     const T2 = "2026-11-09T12:00:00.000Z";
     const { calls } = mockGateRoutes({
-      version: { contentVersion: "v2", serverTime: T2 },
+      version: { contentVersion: "2", serverTime: T2 },
       deltas: [{ words: [word("w1")], removedIds: [], serverTime: T2, nextCursor: null }],
     });
     const res = await syncNow(store, null);
     expect(res.applied).toBe(1);
     expect(calls.some((u) => u.includes("/api/sync?"))).toBe(true);
-    expect(await store.getKV("piiyaak:contentVersion")).toBe("v2");
+    expect(await store.getKV("piiyaak:contentVersion")).toBe("2");
     expect(await store.getLastSync()).toBe(T2);
     expect(await store.getById("w1")).not.toBeNull();
   });
 
   it("versión remota menor también sincroniza y adopta la remota (borde 6.1)", async () => {
-    const store = await seededStore("v2", NOW);
+    const store = await seededStore("2", NOW);
     mockGateRoutes({
-      version: { contentVersion: "v1", serverTime: NOW },
+      version: { contentVersion: "1", serverTime: NOW },
       deltas: [{ words: [], removedIds: [], serverTime: NOW, nextCursor: null }],
     });
     await syncNow(store, null);
-    expect(await store.getKV("piiyaak:contentVersion")).toBe("v1");
+    expect(await store.getKV("piiyaak:contentVersion")).toBe("1");
   });
 
   it("instalación sin contentVersion hace sync completa reutilizando lastSync como cursor", async () => {
     const T0 = "2026-10-01T00:00:00.000Z";
     const store = await seededStore(null, T0);
     const { calls } = mockGateRoutes({
-      version: { contentVersion: "v5", serverTime: NOW },
+      version: { contentVersion: "5", serverTime: NOW },
       deltas: [{ words: [word("w9")], removedIds: [], serverTime: NOW, nextCursor: null }],
     });
     const res = await syncNow(store, null);
@@ -226,20 +226,20 @@ describe("syncNow gate de versión (B1)", () => {
     // Rama incremental (reutiliza since), no seed redundante:
     expect(calls.some((u) => u.includes("/api/sync/seed"))).toBe(false);
     expect(calls.some((u) => u.includes("/api/sync?") && u.includes(encodeURIComponent(T0).slice(0, 8)))).toBe(true);
-    expect(await store.getKV("piiyaak:contentVersion")).toBe("v5");
+    expect(await store.getKV("piiyaak:contentVersion")).toBe("5");
     expect(await store.getById("w9")).not.toBeNull();
   });
 
   it("sin datos ni lastSync hace fullSeed y adopta el gate", async () => {
     const store = new MemoryWordStore();
     const { calls } = mockGateRoutes({
-      version: { contentVersion: "v1", serverTime: NOW },
+      version: { contentVersion: "1", serverTime: NOW },
       seedPages: [{ words: [word("s1")], total: 1, totalPages: 1, serverTime: NOW }],
     });
     const res = await syncNow(store, null);
     expect(res.applied).toBe(1);
     expect(calls.some((u) => u.includes("/api/sync/seed"))).toBe(true);
-    expect(await store.getKV("piiyaak:contentVersion")).toBe("v1");
+    expect(await store.getKV("piiyaak:contentVersion")).toBe("1");
     expect(await store.getLastSync()).toBe(NOW);
   });
 });
@@ -264,7 +264,7 @@ describe("arranque offline (B1)", () => {
     const store = new MemoryWordStore();
     await store.upsertWords([word("w1", "mango"), word("w2", "piña")]);
     await store.setLastSync(NOW);
-    await store.setKV("piiyaak:contentVersion", "v7");
+    await store.setKV("piiyaak:contentVersion", "7");
     const fetchMock = vi.fn(async (_url: string) => {
       throw new Error("offline");
     });
@@ -291,7 +291,7 @@ describe("arranque offline (B1)", () => {
       vi.fn(async (url: string) => {
         seen.push(url);
         if (url.includes("/api/sync/version")) {
-          return { ok: true, status: 200, json: async () => ({ contentVersion: "v9", serverTime: NOW }) } as unknown as Response;
+          return { ok: true, status: 200, json: async () => ({ contentVersion: "9", serverTime: NOW }) } as unknown as Response;
         }
         if (url.includes("/api/sync/seed")) {
           return { ok: true, status: 200, json: async () => ({ words: [], total: 0, totalPages: 0, serverTime: NOW }) } as unknown as Response;
@@ -302,7 +302,7 @@ describe("arranque offline (B1)", () => {
     await syncNow(store, null);
     // El gate no ve ni contentVersion ni lastSync con prefijo → sincroniza.
     expect(seen.some((u) => u.includes("/api/sync/seed") || u.includes("/api/sync?"))).toBe(true);
-    expect(await store.getKV("piiyaak:contentVersion")).toBe("v9");
+    expect(await store.getKV("piiyaak:contentVersion")).toBe("9");
   });
 });
 
@@ -317,7 +317,7 @@ describe("lectura sin sesión (B1)", () => {
   it("incremental con authToken null completa sin encabezados de auth", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("/api/sync/version")) {
-        return { ok: true, status: 200, json: async () => ({ contentVersion: "v1", serverTime: NOW }) } as unknown as Response;
+        return { ok: true, status: 200, json: async () => ({ contentVersion: "1", serverTime: NOW }) } as unknown as Response;
       }
       return {
         ok: true,

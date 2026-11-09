@@ -24,10 +24,10 @@ function okVersion(contentVersion: string, serverTime: string) {
 
 describe("getRemoteVersion", () => {
   it("hace GET /api/sync/version sin encabezado de autenticación con session null", async () => {
-    const fetchMock = okVersion("v42", "2026-11-01T00:00:00.000Z");
+    const fetchMock = okVersion("42", "2026-11-01T00:00:00.000Z");
     vi.stubGlobal("fetch", fetchMock);
     const v = await getRemoteVersion(null);
-    expect(v).toEqual({ contentVersion: "v42", serverTime: "2026-11-01T00:00:00.000Z" });
+    expect(v).toEqual({ contentVersion: "42", serverTime: "2026-11-01T00:00:00.000Z" });
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toContain("/api/sync/version");
@@ -36,6 +36,39 @@ describe("getRemoteVersion", () => {
     expect(headers.get("Authorization")).toBeNull();
   });
 
+  it("acepta contentVersion numérico legacy y lo normaliza a string canónico", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ contentVersion: 41, serverTime: "2026-11-01T00:00:00.000Z" }),
+      } as unknown as Response))
+    );
+    const v = await getRemoteVersion(null);
+    expect(v).toEqual({ contentVersion: "41", serverTime: "2026-11-01T00:00:00.000Z" });
+    expect(typeof v.contentVersion).toBe("string");
+  });
+
+  it("acepta string canónico idéntico", async () => {
+    vi.stubGlobal("fetch", okVersion("41", "2026-11-01T00:00:00.000Z"));
+    const v = await getRemoteVersion(null);
+    expect(v.contentVersion).toBe("41");
+  });
+
+  it("rechaza string vacío y número negativo", async () => {
+    for (const bad of ["", -1]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ contentVersion: bad, serverTime: "2026-11-01T00:00:00.000Z" }),
+        } as unknown as Response))
+      );
+      await expect(getRemoteVersion(null)).rejects.toThrow();
+    }
+  });
   it("rechaza respuesta inválida sin contentVersion", async () => {
     vi.stubGlobal(
       "fetch",
