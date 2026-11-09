@@ -6,7 +6,7 @@ import { useAuth } from "../auth";
 import { theme } from "../theme";
 import { EmptyState } from "../components/empty-state";
 import type { WordRow } from "../db/types";
-import { apiFetch } from "../api";
+import { loadWordOfDay } from "../db/word-of-day";
 
 export default function Buscar() {
   const { store, ready, sync } = useDb();
@@ -33,34 +33,17 @@ export default function Buscar() {
     };
   }, [q, store]);
 
-  // Palabra del día (cacheada por fecha en kv)
+  // Palabra del día (cacheada por fecha en kv; anónima desde B1)
   useEffect(() => {
     let alive = true;
     (async () => {
       if (!store) return;
       const today = new Date().toISOString().slice(0, 10);
-      const cachedDate = await store.getKV("wodDate");
-      const cachedId = await store.getKV("wodId");
-      if (cachedDate === today && cachedId) {
-        const w = await store.getById(cachedId);
+      try {
+        const w = await loadWordOfDay(store, today, session);
         if (alive && w) setWod(w);
-      }
-      // best-effort refresh online
-      if (session) {
-        try {
-          const res = await apiFetch(`/api/dictionary/word-of-day?date=${today}`, {}, session);
-          if (res.ok) {
-            const body = (await res.json()) as { word?: { id: string } | null };
-            if (body.word?.id) {
-              await store.setKV("wodDate", today);
-              await store.setKV("wodId", body.word.id);
-              const w = await store.getById(body.word.id);
-              if (alive && w) setWod(w);
-            }
-          }
-        } catch {
-          // offline: keep cached
-        }
+      } catch {
+        // offline sin caché: no hay palabra del día
       }
     })();
     return () => {

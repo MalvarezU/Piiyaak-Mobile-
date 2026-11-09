@@ -265,14 +265,14 @@ describe("arranque offline (B1)", () => {
     await store.upsertWords([word("w1", "mango"), word("w2", "piña")]);
     await store.setLastSync(NOW);
     await store.setKV("piiyaak:contentVersion", "v7");
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (_url: string) => {
       throw new Error("offline");
     });
     vi.stubGlobal("fetch", fetchMock);
     // Gate intenta versión, falla, y resuelve local sin lanzar:
     const res = await syncNow(store, null);
     expect(res).toMatchObject({ applied: 0, removed: 0 });
-    const calls = fetchMock.mock.calls.map((c) => String(c[0]));
+    const calls = fetchMock.mock.calls.map((c) => String(c[0]!));
     expect(calls.some((u) => u.includes("/api/sync/seed") || u.includes("/api/sync?"))).toBe(false);
     // El bundle sirve lectura local:
     expect((await store.search("man")).map((w) => w.id)).toEqual(["w1"]);
