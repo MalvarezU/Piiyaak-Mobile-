@@ -5,6 +5,7 @@ import {
   getLocalVersion,
   getRemoteVersion,
   setLocalVersion,
+  compareVersions,
 } from "./version-gate";
 import {
   collapseOutboxForDrain,
@@ -139,17 +140,28 @@ export async function incrementalSync(
 }
 
 /**
- * Primera vez: seed; después: deltas. Gate de versión (B1):
- * - Igualdad exacta local==remota → sin red adicional, retorna vacío.
- * - Distinta o ausente → rama existente (seed o incremental con `since`
- *   reutilizado) y adopción del gate vía escritura conjunta.
+ * Primera vez: seed; después: deltas. Gate solo-adelante (W3 §4.6, F0 §1.3):
+ * - `skip` (igualdad exacta) → sin red adicional, retorno vacío.
+ * - `noop` (remota < local, D3) → sin seed ni escrituras, warn
+ *   estructurado, la app sigue con local. Causas típicas: fila
+ *   `ContentVersion(id=1)` recreada, restore de BD (runbook R12).
+ * - `seed` (remota > local o local ausente/inválido) → con `runSeed`
+ *   inyectado delega el flujo §4.2–§4.5; sin inyección conserva la rama
+ *   heredada (seed o incremental con `since` + adopción conjunta).
  * - Versión inalcanzable (offline) con bundle → resuelve local sin lanzar.
  * Acepta `session = null`: la lectura nunca exige autenticación.
  */
 export async function syncNow(
   store: WordStore,
   session: SessionState | null,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  opts?: {
+    runSeed?: (
+      remote: string,
+      serverTime: string,
+      onProgress?: (done: number, total: number) => void
+    ) => Promise<void>;
+  }
 ): Promise<SyncResult> {
   const local = await getLocalVersion(store);
   const hasData = (await store.count()) > 0;
@@ -162,7 +174,23 @@ export async function syncNow(
     }
     throw e;
   }
-  if (local.contentVersion !== null && local.contentVersion === remote.contentVersion) {
+  const move = compareVersions(local.contentVersion, remote.contentVersion);
+  if (move.action === "skip") {
+    return { applied: 0, removed: 0, serverTime: remote.serverTime, hasMore: false };
+  }
+  if (move.action === "noop") {
+    console.warn(
+      `[sync] noop sin downgrade (D3): remote ${remote.contentVersion} < local ${local.contentVersion} — se mantiene local (${move.reason})`
+    );
+    return {
+      applied: 0,
+      removed: 0,
+      serverTime: local.lastSync ?? remote.serverTime,
+      hasMore: false,
+    };
+  }
+  if (opts?.runSeed) {
+    await opts.runSeed(move.remote, remote.serverTime, onProgress);
     return { applied: 0, removed: 0, serverTime: remote.serverTime, hasMore: false };
   }
   const res =

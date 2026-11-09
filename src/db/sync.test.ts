@@ -204,14 +204,42 @@ describe("syncNow gate de versión (B1)", () => {
     expect(await store.getById("w1")).not.toBeNull();
   });
 
-  it("versión remota menor también sincroniza y adopta la remota (borde 6.1)", async () => {
+  it("versión remota menor es no-op: sin seed, sin escrituras, con warn (D3)", async () => {
     const store = await seededStore("2", NOW);
-    mockGateRoutes({
-      version: { contentVersion: "1", serverTime: NOW },
-      deltas: [{ words: [], removedIds: [], serverTime: NOW, nextCursor: null }],
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { calls } = mockGateRoutes({
+        version: { contentVersion: "1", serverTime: NOW },
+        deltas: [{ words: [], removedIds: [], serverTime: NOW, nextCursor: null }],
+      });
+      const res = await syncNow(store, null);
+      expect(res).toMatchObject({ applied: 0, removed: 0, hasMore: false });
+      // Solo el gate; ninguna red adicional de sync/seed.
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain("/api/sync/version");
+      // Cero escrituras: la local se mantiene.
+      expect(await store.getKV("piiyaak:contentVersion")).toBe("2");
+      expect(await store.getLastSync()).toBe(NOW);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(/remote.*1.*local.*2|noop/i);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("versión remota mayor delega al seed inyectado sin red adicional", async () => {
+    const store = await seededStore("1", NOW);
+    const T2 = "2026-11-09T12:00:00.000Z";
+    const { calls } = mockGateRoutes({
+      version: { contentVersion: "2", serverTime: T2 },
+      deltas: [{ words: [word("w1")], removedIds: [], serverTime: T2, nextCursor: null }],
     });
-    await syncNow(store, null);
-    expect(await store.getKV("piiyaak:contentVersion")).toBe("1");
+    const runSeed = vi.fn(async () => {});
+    const res = await syncNow(store, null, undefined, { runSeed });
+    expect(runSeed).toHaveBeenCalledOnce();
+    expect(runSeed).toHaveBeenCalledWith("2", T2, undefined);
+    expect(calls.some((u) => u.includes("/api/sync/seed") || u.includes("/api/sync?"))).toBe(false);
+    expect(res).toMatchObject({ serverTime: T2, hasMore: false });
   });
 
   it("instalación sin contentVersion hace sync completa reutilizando lastSync como cursor", async () => {
