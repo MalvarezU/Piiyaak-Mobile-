@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { SQLiteDatabase } from "expo-sqlite";
 import { normalize } from "../normalize";
 import type { WordRow } from "./types";
+import type { MediaManifestRow, MediaKind } from "./media-cache";
 
 /**
  * Capa SQLite local (B3.3): snapshot + deltas del contrato /api/sync.
@@ -113,6 +114,12 @@ export interface WordStore {
   addHistory(wordId: string, viewedAt: string): Promise<void>;
   listHistory(limit?: number): Promise<string[]>;
   clearHistory(): Promise<void>;
+  upsertManifest(row: MediaManifestRow): Promise<void>;
+  listManifest(): Promise<MediaManifestRow[]>;
+  clearManifestStale(
+    validKeys: readonly string[],
+    favoriteIds: readonly string[]
+  ): Promise<{ removed: number }>;
 }
 
 export interface KeyValue {
@@ -307,5 +314,60 @@ export class SQLiteWordStore implements WordStore {
 
   async clearHistory(): Promise<void> {
     await this.db.runAsync("DELETE FROM history");
+  }
+
+  async upsertManifest(row: MediaManifestRow): Promise<void> {
+    await this.db.runAsync(
+      `INSERT INTO media_manifest (word_id, kind, url, sha256, local_uri)
+       VALUES (?,?,?,?,?)
+       ON CONFLICT(word_id, kind) DO UPDATE SET
+         url=excluded.url, sha256=excluded.sha256, local_uri=excluded.local_uri`,
+      [row.wordId, row.kind, row.url, row.sha256, row.localUri]
+    );
+  }
+
+  async listManifest(): Promise<MediaManifestRow[]> {
+    const rows = await this.db.getAllAsync<{
+      word_id: string;
+      kind: MediaKind;
+      url: string;
+      sha256: string | null;
+      local_uri: string;
+    }>("SELECT word_id, kind, url, sha256, local_uri FROM media_manifest");
+    return rows.map((r) => ({
+      wordId: r.word_id,
+      kind: r.kind,
+      url: r.url,
+      sha256: r.sha256,
+      localUri: r.local_uri,
+    }));
+  }
+
+  /**
+   * Poda lógica del manifiesto: conserva filas vigentes + favoritas
+   * (§6.4). Aditiva: nunca toca words/history/kv/outbox.
+   */
+  async clearManifestStale(
+    validKeys: readonly string[],
+    favoriteIds: readonly string[]
+  ): Promise<{ removed: number }> {
+    const valid = validKeys.map((k) => `'${k.replace(/'/g, "''")}'`).join(",");
+    const favs = favoriteIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
+    const conditions: string[] = [];
+    if (valid) {
+      conditions.push(`(word_id || '|' || kind) NOT IN (${valid})`);
+    }
+    if (favs) {
+      conditions.push(`word_id NOT IN (${favs})`);
+    }
+    if (conditions.length === 0) return { removed: 0 };
+    const res = await this.db.runAsync(
+      `DELETE FROM media_manifest WHERE ${conditions.join(" AND ")}`
+    );
+    const removed =
+      typeof res === "object" && res !== null && "changes" in res
+        ? Number((res as { changes: number }).changes) || 0
+        : 0;
+    return { removed };
   }
 }

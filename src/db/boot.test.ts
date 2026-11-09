@@ -23,6 +23,22 @@ describe("contrato de bundle unificado (B1)", () => {
     }
   });
 
+  it("sqlite-store y memory-store exponen el espejo del manifiesto (B3)", () => {
+    // sqlite-store.ts no se puede importar en Node (módulos nativos);
+    // contrato verificado de forma estática a propósito.
+    const sqlite = read("src/db/sqlite-store.ts");
+    for (const method of ["upsertManifest", "listManifest", "clearManifestStale"]) {
+      expect(sqlite).toContain(method);
+    }
+    // clearManifestStale nunca poda favoritas a nivel lógico.
+    const staleBody = sqlite.slice(sqlite.indexOf("async clearManifestStale"));
+    expect(staleBody).toContain("word_id NOT IN");
+    const memory = read("src/db/memory-store.ts");
+    for (const method of ["upsertManifest", "listManifest", "clearManifestStale"]) {
+      expect(memory).toContain(method);
+    }
+  });
+
   it("export-db.py siembra claves con prefijo + contentVersion + schema 4", () => {
     const py = read("scripts/export-db.py");
     expect(py).toContain('"piiyaak:lastSync"');

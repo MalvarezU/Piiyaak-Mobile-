@@ -1,5 +1,7 @@
 import type { WordRow } from "./types";
 import type { WordStore } from "./sqlite-store";
+import type { MediaManifestRow, MediaKind } from "./media-cache";
+import { manifestKey } from "./media-cache";
 import { normalize } from "../normalize";
 
 /**
@@ -108,5 +110,36 @@ export class MemoryWordStore implements WordStore {
 
   async clearHistory(): Promise<void> {
     this.history.clear();
+  }
+
+  private manifest = new Map<string, MediaManifestRow>();
+
+  async upsertManifest(row: MediaManifestRow): Promise<void> {
+    this.manifest.set(manifestKey(row.wordId, row.kind as MediaKind), {
+      ...row,
+    });
+  }
+
+  async listManifest(): Promise<MediaManifestRow[]> {
+    return [...this.manifest.values()].map((r) => ({ ...r }));
+  }
+
+  /**
+   * Conserva las filas vigentes + todas las de favoritas (§6.4); el resto
+   * sale del manifiesto (la poda física la hace `MediaCache.prune`).
+   */
+  async clearManifestStale(
+    validKeys: readonly string[],
+    favoriteIds: readonly string[]
+  ): Promise<{ removed: number }> {
+    const valid = new Set(validKeys);
+    const favs = new Set(favoriteIds);
+    let removed = 0;
+    for (const [key, row] of [...this.manifest.entries()]) {
+      if (valid.has(key) || favs.has(row.wordId)) continue;
+      this.manifest.delete(key);
+      removed++;
+    }
+    return { removed };
   }
 }
