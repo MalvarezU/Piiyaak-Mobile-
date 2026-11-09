@@ -5,11 +5,12 @@ import { useDb } from "../db-context";
 import { useAuth } from "../auth";
 import { theme } from "../theme";
 import { EmptyState } from "../components/empty-state";
+import { SeedProgress } from "../components/seed-progress";
 import type { WordRow } from "../db/types";
 import { loadWordOfDay } from "../db/word-of-day";
 
 export default function Buscar() {
-  const { store, ready, sync } = useDb();
+  const { store, ready, sync, seedState, retrySeed, continueTextOnly } = useDb();
   const { session } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -80,7 +81,11 @@ export default function Buscar() {
         onChangeText={setQ}
         autoCapitalize="none"
       />
-      {!ready && <Text style={styles.muted}>Preparando diccionario offline...</Text>}
+      {seedState ? (
+        <SeedProgress state={seedState} onRetry={retrySeed} onTextOnly={continueTextOnly} />
+      ) : !ready ? (
+        <Text style={styles.muted}>Preparando diccionario offline...</Text>
+      ) : null}
       <TouchableOpacity style={styles.gamesBtn} onPress={() => router.push("/juegos")}>
         <Text style={styles.gamesBtnText}>🎮 Juegos</Text>
       </TouchableOpacity>

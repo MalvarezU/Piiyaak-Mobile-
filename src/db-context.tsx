@@ -5,6 +5,7 @@ import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system";
 import { SQLiteWordStore, type WordStore, type OutboxRow } from "./db/sqlite-store";
 import { SQLiteCourseStore, type CourseStore } from "./db/course-store";
+import type { SeedState } from "./db/seed-machine";
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
 import { refreshMediaAfterSync } from "./db/sync-media";
@@ -38,6 +39,10 @@ interface DbContextValue {
   history: WordRow[];
   pushHistory: (word: WordRow) => void;
   pendingOutboxCount: number;
+  /** W3 — estado del seed ("Preparando contenido"). `null` = inactivo. */
+  seedState: SeedState | null;
+  retrySeed: () => Promise<void>;
+  continueTextOnly: () => void;
 }
 
 const DbContext = createContext<DbContextValue | null>(null);
@@ -56,6 +61,18 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const [historyWords, setHistoryWords] = useState<WordRow[]>([]);
   const [pendingOutboxCount, setPendingOutboxCount] = useState(0);
   const storeRef = useRef<WordStore | null>(null);
+  // W3 — la orquestación real (descarga/swap) se conecta en W3-06; acá
+  // solo el estado que consume la pantalla, con la apertura instantánea
+  // existente intacta como fallback.
+  const [seedState, setSeedState] = useState<SeedState | null>(null);
+
+  const retrySeed = async (): Promise<void> => {
+    setSeedState({ status: "checking" });
+  };
+
+  const continueTextOnly = (): void => {
+    setSeedState(null);
+  };
 
   // open db once
   useEffect(() => {
@@ -308,9 +325,12 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       history: historyWords,
       pushHistory,
       pendingOutboxCount,
+      seedState,
+      retrySeed,
+      continueTextOnly,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, courseStore, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount]
+    [store, courseStore, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount, seedState]
   );
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;
 }
