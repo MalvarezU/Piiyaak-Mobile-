@@ -5,8 +5,8 @@ import { useLocalSearchParams } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme } from "../../theme";
 import type { WordRow } from "../../db/types";
-import { audioExists, localAudioPath } from "../../audio";
-import { illustrationExists, localIllustrationPath } from "../../illustrations";
+import { resolveAudioUri } from "../../audio";
+import { resolveIllustrationUri } from "../../illustrations";
 import { WordIllustration } from "../../components/word-illustration";
 
 export default function Ficha() {
@@ -50,11 +50,14 @@ export default function Ficha() {
         setIllustrationSrc(null);
         return;
       }
-      const exists = await illustrationExists(word.id, word.illustrationUrl);
+      // Doble lookup por contenido (B3-03): cache → heredado → remoto.
+      const uri = await resolveIllustrationUri({
+        id: word.id,
+        illustrationUrl: word.illustrationUrl,
+        illustrationSha256: word.illustrationSha256 ?? null,
+      });
       if (alive) {
-        setIllustrationSrc(
-          exists ? localIllustrationPath(word.id, word.illustrationUrl) : word.illustrationUrl
-        );
+        setIllustrationSrc(uri);
       }
     })();
     return () => {
@@ -97,9 +100,11 @@ export default function Ficha() {
     }
     setLoading(true);
     try {
-      let uri = word.audioUrl;
-      const exists = await audioExists(word.id, word.audioUrl);
-      if (exists) uri = localAudioPath(word.id, word.audioUrl);
+      const uri = await resolveAudioUri({
+        id: word.id,
+        audioUrl: word.audioUrl,
+        audioSha256: word.audioSha256 ?? null,
+      });
       const { sound } = await Audio.Sound.createAsync(
         { uri },
         { shouldPlay: true },

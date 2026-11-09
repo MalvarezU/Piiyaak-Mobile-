@@ -4,8 +4,36 @@ import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { useAuth } from "../../auth";
 import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
+import { resolveCachedUri } from "../../db/media-fs";
 import { theme } from "../../theme";
 import type { CourseRow } from "../../db/course-types";
+
+/**
+ * Portada con resolución contra el media-cache (B3-03): contenido si está
+ * descargado, remota si no. Sin pasado heredado (las portadas nunca se
+ * cachearon por `wordId`), por lo que no hay doble lookup.
+ */
+function CourseCover({ courseId, uri }: { courseId: string; uri: string }) {
+  const [src, setSrc] = useState(uri);
+  useEffect(() => {
+    let alive = true;
+    setSrc(uri);
+    resolveCachedUri({
+      wordId: `course:${courseId}`,
+      kind: "illustration",
+      url: uri,
+      sha256: null,
+    })
+      .then((resolved) => {
+        if (alive) setSrc(resolved);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [courseId, uri]);
+  return <Image source={{ uri: src }} style={styles.cover} resizeMode="cover" />;
+}
 
 export default function Cursos() {
   const { store, courseStore } = useDb();
@@ -54,7 +82,7 @@ export default function Cursos() {
             style={styles.card}
             onPress={() => router.push({ pathname: "/cursos/[id]", params: { id: item.id } })}
           >
-            {item.coverImage ? <Image source={{ uri: item.coverImage }} style={styles.cover} resizeMode="cover" /> : null}
+            {item.coverImage ? <CourseCover courseId={item.id} uri={item.coverImage} /> : null}
             <Text style={styles.cardTitle}>{item.title}</Text>
             {item.description ? <Text style={styles.cardDesc}>{item.description}</Text> : null}
           </TouchableOpacity>

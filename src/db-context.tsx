@@ -10,8 +10,8 @@ import { syncNow, flushOutbox, type AuthError } from "./db/sync";
 import { useAuth } from "./auth";
 import { apiFetch } from "./api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { downloadAudio, removeAudio } from "./audio";
-import { downloadIllustration, removeIllustration } from "./illustrations";
+import { downloadWordAudio, removeWordAudio } from "./audio";
+import { downloadWordIllustration, removeWordIllustration } from "./illustrations";
 
 /**
  * Contrato B2 (§1.2): el provider expone el store de cursos derivado de la
@@ -196,19 +196,36 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       : [...favorites, word.id];
     setFavorites(next);
     // Descargas en background al favoritar / borrado al desfavoritar (RF-47).
+    // Hash-aware (B3-03): resuelven por contenido con fallback heredado.
     if (!isFav) {
       if (word.audioUrl) {
-        downloadAudio(word.id, word.audioUrl).catch(() => {});
+        downloadWordAudio({
+          id: word.id,
+          audioUrl: word.audioUrl,
+          audioSha256: word.audioSha256,
+        }).catch(() => {});
       }
       if (word.illustrationUrl) {
-        downloadIllustration(word.id, word.illustrationUrl).catch(() => {});
+        downloadWordIllustration({
+          id: word.id,
+          illustrationUrl: word.illustrationUrl,
+          illustrationSha256: word.illustrationSha256,
+        }).catch(() => {});
       }
     } else {
       if (word.audioUrl) {
-        removeAudio(word.id, word.audioUrl).catch(() => {});
+        removeWordAudio({
+          id: word.id,
+          audioUrl: word.audioUrl,
+          audioSha256: word.audioSha256,
+        }).catch(() => {});
       }
       if (word.illustrationUrl) {
-        removeIllustration(word.id, word.illustrationUrl).catch(() => {});
+        removeWordIllustration({
+          id: word.id,
+          illustrationUrl: word.illustrationUrl,
+          illustrationSha256: word.illustrationSha256,
+        }).catch(() => {});
       }
     }
     if (store) {

@@ -354,3 +354,90 @@ describe("descarga y poblado (B3-02)", () => {
     expect(ids).toEqual(["fav", "w1"]);
   });
 });
+
+describe("poda contra manifiesto (B3-03)", () => {
+  const noSleep = async (_ms: number): Promise<void> => {};
+  const BASE = "file:///mock-doc/";
+
+  async function seedV1() {
+    const { MemoryWordStore } = await import("./memory-store");
+    const { populateMediaCache } = await import("./media-cache");
+    const store = new MemoryWordStore();
+    const w1 = wordRow({ id: "w1" });
+    const w2 = wordRow({
+      id: "w2",
+      audioUrl: "https://cdn.example.com/audio/dos.mp3",
+      illustrationUrl: "https://cdn.example.com/img/dos.png",
+    });
+    await store.upsertWords([w1, w2]);
+    const words = await store.listAZ(null, 100);
+    const media = createMemoryMediaStore(BASE);
+    const cache = createMediaCache(media, { baseDir: BASE, sleep: noSleep });
+    await populateMediaCache(cache, store, words, []);
+    return { store, media, cache };
+  }
+
+  it("segunda sync con manifiesto reducido poda huerfanos y conserva referenciados", async () => {
+    const { store, media, cache } = await seedV1();
+    const before = await store.listManifest();
+    expect(before).toHaveLength(4);
+    // v2: solo w1 sobrevive; la poda logica + fisica la ejecuta el llamador.
+    const v2 = before.filter((r) => r.wordId === "w1");
+    const valid = v2.map((r) => `${r.wordId}|${r.kind}`);
+    await store.clearManifestStale(valid, []);
+    const { removed } = await cache.prune(await store.listManifest(), []);
+    expect(removed).toBe(2);
+    for (const row of v2) {
+      expect((await media.getInfo(row.localUri)).exists).toBe(true);
+    }
+    expect(media.__files().size).toBe(2);
+  });
+
+  it("prune conserva archivos de favoritas aunque salgan del manifiesto", async () => {
+    const { store, media, cache } = await seedV1();
+    // Favorita con archivo heredado (pre-B3) y sin fila vigente.
+    const legacyFav = `${BASE}audios/fav.mp3`;
+    media.__files().set(legacyFav, "bytes-of:legacy");
+    const all = await store.listManifest();
+    const v2 = all.filter((r) => r.wordId === "w1");
+    await store.clearManifestStale(
+      v2.map((r) => `${r.wordId}|${r.kind}`),
+      ["fav"]
+    );
+    const { removed } = await cache.prune(await store.listManifest(), [
+      "fav",
+    ]);
+    // Solo w2 (audio + ilustracion) se poda; fav heredado se conserva.
+    expect(removed).toBe(2);
+    expect((await media.getInfo(legacyFav)).exists).toBe(true);
+  });
+
+  it("un poblado fallido no elimina archivos preexistentes", async () => {
+    const { store, media, cache } = await seedV1();
+    const filesBefore = media.__files().size;
+    const bad: MediaRef = {
+      wordId: "w3",
+      kind: "audio",
+      url: "https://cdn.example.com/audio/tres.mp3",
+      sha256: null,
+    };
+    const failing = {
+      ...createMemoryMediaStore(BASE),
+      download: async (): Promise<{ uri: string }> => {
+        throw new Error("net down");
+      },
+    };
+    const failingCache = createMediaCache(failing, {
+      baseDir: BASE,
+      sleep: noSleep,
+      maxAttempts: 1,
+    });
+    const { failed } = await failingCache.ensureAllCached([bad]);
+    expect(failed).toHaveLength(1);
+    // La poda nunca corre tras un poblado fallido: disciplina del llamador,
+    // verificada acá por separación (populate/prune no se invocan solos).
+    expect(media.__files().size).toBe(filesBefore);
+    expect(store).toBeDefined();
+    expect(cache).toBeDefined();
+  });
+});

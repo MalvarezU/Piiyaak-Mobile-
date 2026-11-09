@@ -48,8 +48,78 @@ import { useDb } from "../../../db-context";
 import { useAuth } from "../../../auth";
 import { apiFetch } from "../../../api";
 import { theme } from "../../../theme";
+import { resolveCachedUri } from "../../../db/media-fs";
 import type { LessonRow } from "../../../db/course-types";
 import type { CourseProgressRow } from "../../../db/course-types";
+
+/**
+ * Bloques de medios con resolución contra el media-cache (B3-03, spec §3.1):
+ * `image` y `audio`/`listening` usan la clave `lesson:<id>`; sin pasado
+ * heredado, por lo que resuelven contenido → remoto. Video/youtubeId quedan
+ * excluidos (spec §3.2) y conservan el comportamiento actual.
+ */
+function CachedLessonImage({
+  lessonId,
+  url,
+  caption,
+}: {
+  lessonId: string;
+  url: string;
+  caption?: string;
+}) {
+  const [src, setSrc] = useState(url);
+  useEffect(() => {
+    let alive = true;
+    setSrc(url);
+    resolveCachedUri({
+      wordId: `lesson:${lessonId}`,
+      kind: "illustration",
+      url,
+      sha256: null,
+    })
+      .then((resolved) => {
+        if (alive) setSrc(resolved);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [lessonId, url]);
+  return (
+    <View>
+      <Image source={{ uri: src }} style={styles.imageBlock} resizeMode="cover" />
+      {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+    </View>
+  );
+}
+
+function CachedLessonAudio({
+  lessonId,
+  url,
+}: {
+  lessonId: string;
+  url: string;
+}) {
+  const [resolved, setResolved] = useState(url);
+  useEffect(() => {
+    let alive = true;
+    setResolved(url);
+    resolveCachedUri({
+      wordId: `lesson:${lessonId}`,
+      kind: "audio",
+      url,
+      sha256: null,
+    })
+      .then((r) => {
+        if (alive) setResolved(r);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [lessonId, url]);
+  return <ListeningPlayer key={resolved} url={resolved} />;
+}
 
 interface Block {
   id: string;
@@ -115,7 +185,7 @@ export default function Leccion() {
       <Text style={styles.title}>{lesson.title}</Text>
       {content.blocks.map((block) => (
         <View key={block.id} style={styles.block}>
-          {renderBlock(block, wordMap)}
+          {renderBlock(block, wordMap, String(id))}
         </View>
       ))}
       <TouchableOpacity
@@ -144,19 +214,24 @@ export default function Leccion() {
   );
 }
 
-function renderBlock(block: Block, wordMap: Record<string, { spanish: string; nasaYuwe: string }>) {
+function renderBlock(block: Block, wordMap: Record<string, { spanish: string; nasaYuwe: string }>, lessonId: string) {
   switch (block.type) {
     case "text":
       return <RichTextBlock html={String(block.html ?? "")} />;
     case "image":
-      return (
-        <View>
-          {block.url ? <Image source={{ uri: String(block.url) }} style={styles.imageBlock} resizeMode="cover" /> : null}
-          {block.caption ? <Text style={styles.caption}>{String(block.caption)}</Text> : null}
-        </View>
-      );
-    case "audio":
-      return <Text style={styles.audioBlock}>🔊 Audio: {String((block.media as { url?: string })?.url ?? "")}</Text>;
+      return block.url ? (
+        <CachedLessonImage
+          lessonId={lessonId}
+          url={String(block.url)}
+          caption={block.caption ? String(block.caption) : undefined}
+        />
+      ) : null;
+    case "audio": {
+      const mediaUrl = (block.media as { url?: string })?.url;
+      return mediaUrl ? (
+        <CachedLessonAudio lessonId={lessonId} url={String(mediaUrl)} />
+      ) : null;
+    }
     case "video":
       return <Text style={styles.videoBlock}>🎬 Video: {String(block.title ?? "")}</Text>;
     case "word": {
@@ -185,7 +260,7 @@ function renderBlock(block: Block, wordMap: Record<string, { spanish: string; na
       const mediaUrl = (block.media as { url?: string })?.url;
       return (
         <View>
-          {mediaUrl ? <ListeningPlayer url={mediaUrl} /> : null}
+          {mediaUrl ? <CachedLessonAudio lessonId={lessonId} url={String(mediaUrl)} /> : null}
           <Text style={styles.listenQ}>{String(block.question ?? "")}</Text>
           {opts.map((o, j) => (
             <Text key={j} style={styles.quizOption}>• {o.text}</Text>
