@@ -8,8 +8,9 @@ import { normalize } from "../normalize";
  */
 export class MemoryWordStore implements WordStore {
   private words = new Map<string, WordRow>();
-  private lastSync: string | null = null;
   private kv = new Map<string, string>();
+  /** Misma clave unificada que SQLiteWordStore (`piiyaak:lastSync`). */
+  private static readonly LAST_SYNC_KEY = "piiyaak:lastSync";
 
   async upsertWords(rows: WordRow[]): Promise<void> {
     for (const w of rows) this.words.set(w.id, { ...w });
@@ -62,11 +63,11 @@ export class MemoryWordStore implements WordStore {
   }
 
   async getLastSync(): Promise<string | null> {
-    return this.lastSync;
+    return this.kv.get(MemoryWordStore.LAST_SYNC_KEY) ?? null;
   }
 
   async setLastSync(iso: string): Promise<void> {
-    this.lastSync = iso;
+    this.kv.set(MemoryWordStore.LAST_SYNC_KEY, iso);
   }
 
   async getKV(key: string): Promise<string | null> {
