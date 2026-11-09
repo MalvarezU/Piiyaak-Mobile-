@@ -14,6 +14,20 @@ import {
   setLocalVersion,
   compareVersions,
 } from "./db/version-gate";
+import {
+  initialUpdateNoticeState,
+  decideNotice,
+  dismissNotice as dismissNoticeState,
+  acceptNotice as acceptNoticeState,
+  settleNotice,
+  metadataOrNull,
+  fetchLatestJson,
+  readDismissedVersion,
+  writeDismissedVersion,
+  clearDismissedVersion,
+  type UpdateAvailable,
+  type UpdateNoticeState,
+} from "./db/update-notice";
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
 import { refreshMediaAfterSync } from "./db/sync-media";
@@ -51,6 +65,10 @@ interface DbContextValue {
   seedState: SeedState | null;
   retrySeed: () => Promise<void>;
   continueTextOnly: () => void;
+  /** W2 — aviso de contenido nuevo (spec §W2.1). `null` = sin aviso visible. */
+  updateAvailable: UpdateAvailable | null;
+  dismissUpdate: () => void;
+  acceptUpdate: () => Promise<void>;
 }
 
 const DbContext = createContext<DbContextValue | null>(null);
@@ -74,6 +92,10 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   // existente queda intacta como fallback; el chequeo del seed corre en
   // segundo plano una vez abierto el store (efecto más abajo).
   const [seedState, setSeedState] = useState<SeedState | null>(null);
+  // W2 — aviso de contenido nuevo: ante `remote > local` el provider
+  // expone el aviso y espera la decisión del usuario (sin descarga
+  // inmediata). El `SeedState` vigente toma el control visual al aceptar.
+  const [notice, setNotice] = useState<UpdateNoticeState>(initialUpdateNoticeState);
   const seedRequestRef = useRef<{ baseUrl: string; remote: string; serverTime: string } | null>(
     null
   );
@@ -138,6 +160,14 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       );
       // `ready` = transición a la app normal con la db adoptada.
       setSeedState({ status: "ready" });
+      // W2 — instalar con éxito limpia el descarte y retira el aviso.
+      setNotice((prev) => settleNotice(prev));
+      try {
+        const current = storeRef.current;
+        if (current) await clearDismissedVersion(current);
+      } catch {
+        // best-effort: el aviso ya se retiró
+      }
       if (seedTimerRef.current) clearTimeout(seedTimerRef.current);
       seedTimerRef.current = setTimeout(() => setSeedState(null), 1200);
     } catch (e) {
@@ -162,6 +192,40 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const continueTextOnly = (): void => {
     seedRequestRef.current = null;
     setSeedState(null);
+    // W2 — salir del flujo también retira el aviso pendiente.
+    setNotice((prev) => settleNotice(prev));
+  };
+
+  /** W2 — posponer el aviso para esta versión (persiste §W2.4). */
+  const dismissUpdate = (): void => {
+    setNotice((prev) => {
+      const next = dismissNoticeState(prev);
+      if (next.status === "dismissed") {
+        const current = storeRef.current;
+        if (current) {
+          writeDismissedVersion(current, next.remote).catch(() => {});
+        }
+      }
+      return next;
+    });
+  };
+
+  /** W2 — descargar ahora: delega a `runSeedInternal` vigente. */
+  const acceptUpdate = async (): Promise<void> => {
+    const req = seedRequestRef.current;
+    if (!req) {
+      setNotice((prev) => settleNotice(prev));
+      return;
+    }
+    setNotice((prev) => acceptNoticeState(prev));
+    // Aceptar limpia el descarte (spec §W2.4).
+    try {
+      const current = storeRef.current;
+      if (current) await clearDismissedVersion(current);
+    } catch {
+      // best-effort: la descarga sigue igual
+    }
+    await runSeedInternal(req.baseUrl, req.remote, req.serverTime);
   };
 
   // open db once
@@ -239,10 +303,35 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
         }
         if (!alive) return;
         seedRequestRef.current = { baseUrl, remote: move.remote, serverTime: remote.serverTime };
-        await runSeedInternal(baseUrl, move.remote, remote.serverTime);
+        // W2 — aviso antes de descargar: metadatos best-effort de
+        // `latest.json` (solo display) + descarte persistido por versión.
+        // `latest.json` ilegible/inválido/divergente → aviso con nulls;
+        // sin red → el `catch` vigente: sin aviso (regla §W2.1.3).
+        const raw = await fetchLatestJson(baseUrl);
+        if (!alive) return;
+        const metadata = metadataOrNull(raw, move.remote);
+        let dismissed: string | null = null;
+        try {
+          dismissed = await readDismissedVersion(storeRef.current ?? store);
+        } catch {
+          dismissed = null;
+        }
+        if (!alive) return;
+        const decided = decideNotice({
+          local: local.contentVersion,
+          remote: move.remote,
+          serverTime: remote.serverTime,
+          dismissed,
+          metadata,
+        });
+        setNotice(decided);
+        // `available` → la UI decide (descargar/posponer);
+        // `dismissed` → el aviso nace pospuesto, sin descarga.
+        return;
       } catch {
         // Offline o gate inalcanzable: la app sigue con el texto local.
         if (alive) setSeedState(null);
+        if (alive) setNotice({ status: "none" });
       }
     })();
     return () => {
@@ -464,9 +553,12 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       seedState,
       retrySeed,
       continueTextOnly,
+      updateAvailable: notice.status === "available" ? notice.update : null,
+      dismissUpdate,
+      acceptUpdate,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, courseStore, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount, seedState]
+    [store, courseStore, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount, seedState, notice]
   );
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;
 }
