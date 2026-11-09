@@ -58,6 +58,8 @@ export interface SeedSwapOpts {
   remote: string;
   serverTime: string;
   partUri: string;
+  /** Hook opcional antes de mover medios (el flujo emite "moviendo medios"). */
+  onMediaPhase?: () => void;
 }
 
 function mediaDest(baseDir: string, mimeType: string, localPath: string): string {
@@ -118,6 +120,7 @@ export async function swapSeedContent(deps: SeedSwapDeps, opts: SeedSwapOpts): P
     );
   }
   // 7. Medios por stem sha256 según prefijo de mimeType.
+  opts.onMediaPhase?.();
   for (const file of manifest.files) {
     await deps.moveFile(`${tmpDir}${file.localPath}`, mediaDest(baseDir, file.mimeType, file.localPath));
   }
