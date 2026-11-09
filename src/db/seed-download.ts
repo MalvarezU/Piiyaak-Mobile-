@@ -11,6 +11,7 @@
  * (este módulo no recibe ningún handle de db).
  */
 import { parseSeedManifest, type SeedManifest } from "./seed-manifest";
+import { decideResume } from "./seed-resume";
 
 export type SeedManifestJson = unknown;
 
@@ -130,6 +131,17 @@ function mapNetworkError(e: unknown): SeedDownloadError {
   return new SeedDownloadError("red", message);
 }
 
+/** Spec §W3.4: 1 intento inicial + 2 reintentos por descarga. */
+export const SEED_DOWNLOAD_MAX_ATTEMPTS = 3;
+/**
+ * Spec §W3.4 — mismos valores que `fetchWithRetry` en `sync.ts`
+ * (sin refactorizar `sync.ts` en este change).
+ */
+export const SEED_DOWNLOAD_RETRY_DELAYS = [2000, 8000];
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function downloadSeed(
   deps: SeedDownloadDeps,
   baseUrl: string,
@@ -188,39 +200,125 @@ export async function downloadSeed(
       ? record.resumeData
       : null;
   const existing = await deps.partialSize(partUri);
-  const resumable =
-    record !== null &&
-    record.partName === `seed-${remote}.zip.part` &&
-    record.totalBytes === manifest.zipBytes &&
-    existing !== null &&
-    existing > 0 &&
-    existing < manifest.zipBytes &&
-    (await deps.supportsResume(zipUrl));
+  const partName = `seed-${remote}.zip.part`;
 
-  let resumed = false;
-  if (resumable) {
-    resumed = true;
-  } else {
-    if (existing !== null) await deps.removeFile(partUri);
-  }
-  const offset = resumed ? (existing ?? 0) : 0;
-  await deps.writeRecord(remote, {
-    partName: `seed-${remote}.zip.part`,
+  // Registro de intención (vigente): el opaco heredado se preserva para
+  // un futuro intento savable; en descarga fresca nace `null`.
+  let current: SeedDownloadRecord = {
+    partName,
     totalBytes: manifest.zipBytes,
     updatedAt: new Date().toISOString(),
-    // El opaco heredado se preserva para un futuro intento savable;
-    // en descarga fresca nace `null`.
     resumeData,
-  });
+  };
+  await deps.writeRecord(remote, current);
 
-  try {
-    // `downloadFile` reporta bytes absolutos del archivo final (incluye
-    // el offset reanudado); se satura al total del manifiesto.
-    await deps.downloadFile(zipUrl, partUri, { offset }, (received, total) =>
-      onProgress(Math.min(received, total), total)
-    );
-  } catch (e) {
-    throw mapNetworkError(e);
+  // `downloadFile`/`resumeDownload` reportan bytes absolutos del archivo
+  // final (incluye el offset reanudado); se satura al total del manifiesto.
+  const reportProgress = (received: number, total: number) =>
+    onProgress(Math.min(received, total), total);
+  const sleepFn = deps.sleep ?? defaultSleep;
+  let resumed = false;
+
+  for (let attempt = 0; attempt < SEED_DOWNLOAD_MAX_ATTEMPTS; attempt++) {
+    const existingNow = attempt === 0 ? existing : await deps.partialSize(partUri);
+    const hasPartialNow =
+      existingNow !== null && existingNow > 0 && existingNow < manifest.zipBytes;
+    const supportsNow = hasPartialNow ? await deps.supportsResume(zipUrl) : false;
+    // El registro escrito arriba siempre coincide (partName/totalBytes
+    // propios); `consistent` del registro heredado solo decidió el
+    // `resumeData` inicial.
+    const offsetResumable = hasPartialNow && supportsNow;
+    const savableData =
+      typeof current.resumeData === "string" && current.resumeData
+        ? current.resumeData
+        : null;
+    const savableDecision = decideResume({
+      record: savableData !== null ? { ...current, resumeData: savableData } : null,
+      existingBytes: existingNow,
+      supportsResume: supportsNow,
+      resumedStatus: null,
+    });
+
+    try {
+      if (
+        savableDecision.action === "resume" &&
+        savableData !== null &&
+        deps.resumeDownload
+      ) {
+        const { status } = await deps.resumeDownload(
+          zipUrl,
+          partUri,
+          savableData,
+          reportProgress
+        );
+        // Guarda `status === 206` obligatoria (§W3.2 fila 6): cualquier
+        // otro status → el servidor ignoró el rango → borrar el `.part`
+        // (posible append ciego) y reinicio fresco en este mismo intento.
+        const guard = decideResume({
+          record: { ...current, resumeData: savableData },
+          existingBytes: existingNow,
+          supportsResume: true,
+          resumedStatus: status,
+        });
+        if (guard.action !== "resume") {
+          await deps.removeFile(partUri);
+          current = {
+            ...current,
+            updatedAt: new Date().toISOString(),
+            resumeData: null,
+          };
+          await deps.writeRecord(remote, current);
+          await deps.downloadFile(zipUrl, partUri, { offset: 0 }, reportProgress);
+          resumed = false;
+        } else {
+          resumed = true;
+        }
+        break;
+      }
+      // Camino fresco u offset heredado (vigente): sin primitiva savable
+      // o sin `resumeData`, el offset sigue viajando con efecto real en
+      // el adaptador del dispositivo.
+      if (!offsetResumable && existingNow !== null) {
+        await deps.removeFile(partUri);
+      }
+      if (!offsetResumable && current.resumeData !== null) {
+        current = { ...current, resumeData: null };
+        await deps.writeRecord(remote, current);
+      }
+      await deps.downloadFile(
+        zipUrl,
+        partUri,
+        { offset: offsetResumable ? (existingNow ?? 0) : 0 },
+        reportProgress
+      );
+      resumed = offsetResumable;
+      break;
+    } catch (e) {
+      const mapped = mapNetworkError(e);
+      // Solo errores recuperables de red reintentan (§W3.4). Integridad
+      // (`espacio`, y fuera del loop: `manifiesto`/`stale`) nunca reintenta.
+      if (mapped.reason !== "red") throw mapped;
+      if (attempt >= SEED_DOWNLOAD_MAX_ATTEMPTS - 1) throw mapped;
+      // Best-effort: pausar el task vivo y persistir el savable para que
+      // el próximo intento continúe donde quedó (dispositivo; en Node el
+      // adaptador inyectable decide).
+      if (deps.pauseAndSavable) {
+        try {
+          const saved = await deps.pauseAndSavable();
+          if (saved) {
+            current = {
+              ...current,
+              updatedAt: new Date().toISOString(),
+              resumeData: saved,
+            };
+            await deps.writeRecord(remote, current);
+          }
+        } catch {
+          // El reintento decide sin savable nuevo.
+        }
+      }
+      await sleepFn(SEED_DOWNLOAD_RETRY_DELAYS[attempt] ?? 8000);
+    }
   }
   return { manifest, zipUri: partUri, resumed };
 }

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 import {
   downloadSeed,
   normalizeSeedRecord,
+  SEED_DOWNLOAD_RETRY_DELAYS,
   type SeedDownloadDeps,
 } from "../seed-download";
 import { decideResume } from "../seed-resume";
@@ -58,6 +60,7 @@ function fakeDeps(opts: {
   seedKvRaw?: string | null;
   failDownload?: Error | null;
   failTimes?: number;
+  failResumeTimes?: number;
   resumeStatus?: number;
   savedResume?: string | null;
   extraParts?: string[];
@@ -77,8 +80,14 @@ function fakeDeps(opts: {
     world.kv.set("piiyaak:seedDownload:41", opts.seedKvRaw);
   }
   let failuresLeft = opts.failTimes ?? (opts.failDownload ? 1 : 0);
+  let resumeFailuresLeft = opts.failResumeTimes ?? 0;
   const downloadFile = vi.fn(
-    async (_url: string, uri: string, o: { offset: number }) => {
+    async (
+      _url: string,
+      uri: string,
+      o: { offset: number },
+      onProgress: (received: number, total: number) => void
+    ) => {
       world.downloadCalls.push({ offset: o.offset });
       if (failuresLeft > 0 && opts.failDownload) {
         failuresLeft -= 1;
@@ -86,6 +95,7 @@ function fakeDeps(opts: {
         world.files.set(uri, half);
         throw opts.failDownload;
       }
+      onProgress(1000, 1000);
       world.files.set(uri, 1000);
     }
   );
@@ -124,8 +134,19 @@ function fakeDeps(opts: {
     async pauseAndSavable() {
       return opts.savedResume ?? null;
     },
-    async resumeDownload(_url: string, uri: string, resumeData: string) {
+    async resumeDownload(
+      _url: string,
+      uri: string,
+      resumeData: string,
+      onProgress: (received: number, total: number) => void
+    ) {
       world.resumeCalls.push({ resumeData });
+      if (resumeFailuresLeft > 0 && opts.failDownload) {
+        resumeFailuresLeft -= 1;
+        world.files.set(uri, 500);
+        throw opts.failDownload;
+      }
+      onProgress(1000, 1000);
       world.files.set(uri, 1000);
       return { status: opts.resumeStatus ?? 206 };
     },
@@ -200,5 +221,139 @@ describe("registro kv con resumeData opaco (W3.2)", () => {
     expect(res.resumed).toBe(false);
     expect(world.removed).toContain("file:///tmp/seed-41.zip.part");
     expect(world.files.get("file:///tmp/seed-42.zip.part")).toBe(1000);
+  });
+});
+
+describe("reintentos con backoff (W3.3–W3.4)", () => {
+  it("error recuperable de red: 3 intentos con delays [2000, 8000]", async () => {
+    const { deps, world } = fakeDeps({
+      failDownload: new Error("timeout de red"),
+      failTimes: 2,
+    });
+    const seen: Array<[number, number]> = [];
+    const res = await downloadSeed(deps, "https://cdn.example/seed", "41", (r, t) =>
+      seen.push([r, t])
+    );
+    expect(world.downloadCalls).toHaveLength(3);
+    expect(world.sleeps).toEqual([...SEED_DOWNLOAD_RETRY_DELAYS]);
+    expect(SEED_DOWNLOAD_RETRY_DELAYS).toEqual([2000, 8000]);
+    expect(world.files.get("file:///tmp/seed-41.zip.part")).toBe(1000);
+    expect(seen.at(-1)).toEqual([1000, 1000]);
+    expect(res.resumed).toBe(true);
+  });
+
+  it("agotados los 3 intentos: propaga el error de red", async () => {
+    const { deps, world } = fakeDeps({
+      failDownload: new Error("timeout de red"),
+      failTimes: 10,
+    });
+    await expect(
+      downloadSeed(deps, "https://cdn.example/seed", "41", () => {})
+    ).rejects.toThrow(/timeout/);
+    expect(world.downloadCalls).toHaveLength(3);
+    expect(world.sleeps).toEqual([2000, 8000]);
+  });
+
+  it("error NO recuperable (espacio): no reintenta", async () => {
+    const { deps, world } = fakeDeps({
+      failDownload: new Error("No space left on device (ENOSPC)"),
+      failTimes: 5,
+    });
+    await expect(
+      downloadSeed(deps, "https://cdn.example/seed", "41", () => {})
+    ).rejects.toThrow(/espacio/);
+    expect(world.downloadCalls).toHaveLength(1);
+    expect(world.sleeps).toEqual([]);
+  });
+
+  it("error de integridad (stale/manifiesto): no descarga ni reintenta", async () => {
+    const stale = fakeDeps({ manifestVersion: "42" });
+    await expect(
+      downloadSeed(stale.deps, "https://cdn.example/seed", "41", () => {})
+    ).rejects.toThrow(/desactualizado/);
+    expect(stale.world.downloadCalls).toHaveLength(0);
+    expect(stale.world.sleeps).toEqual([]);
+
+    const broken = fakeDeps({ manifest: { format: "piiyaak-seed/9" } as never });
+    await expect(
+      downloadSeed(broken.deps, "https://cdn.example/seed", "41", () => {})
+    ).rejects.toThrow();
+    expect(broken.world.downloadCalls).toHaveLength(0);
+    expect(broken.world.sleeps).toEqual([]);
+  });
+});
+
+describe("resume savable con guarda 206 (W3.3)", () => {
+  function savableDeps(extra: Parameters<typeof fakeDeps>[0] = {}) {
+    return fakeDeps({
+      partialBytes: 500,
+      seedKvRaw: JSON.stringify({
+        partName: "seed-41.zip.part",
+        totalBytes: 1000,
+        updatedAt: "x",
+        resumeData: OPAQUE_BLOB,
+      }),
+      resumeOk: true,
+      ...extra,
+    });
+  }
+
+  it("resume 206: continúa sin descarga fresca", async () => {
+    const { deps, world } = savableDeps({ resumeStatus: 206 });
+    const res = await downloadSeed(deps, "https://cdn.example/seed", "41", () => {});
+    expect(world.resumeCalls).toEqual([{ resumeData: OPAQUE_BLOB }]);
+    expect(world.downloadCalls).toHaveLength(0);
+    expect(world.removed).not.toContain("file:///tmp/seed-41.zip.part");
+    expect(res.resumed).toBe(true);
+  });
+
+  it("resume 200 (rango ignorado): truncate-and-fresh en el mismo intento", async () => {
+    const { deps, world } = savableDeps({ resumeStatus: 200 });
+    const res = await downloadSeed(deps, "https://cdn.example/seed", "41", () => {});
+    expect(world.resumeCalls).toHaveLength(1);
+    expect(world.removed).toContain("file:///tmp/seed-41.zip.part");
+    expect(world.downloadCalls).toEqual([{ offset: 0 }]);
+    expect(world.files.get("file:///tmp/seed-41.zip.part")).toBe(1000);
+    expect(readKvRecord(world)?.resumeData).toBeNull();
+    expect(res.resumed).toBe(false);
+  });
+
+  it("fallo de red en resumeAsync: pausa, persiste savable nuevo y reintenta", async () => {
+    const { deps, world } = savableDeps({
+      failDownload: new Error("red caída a mitad del resume"),
+      failResumeTimes: 1,
+      resumeStatus: 206,
+      savedResume: "savable-nuevo-opaco",
+    });
+    const res = await downloadSeed(deps, "https://cdn.example/seed", "41", () => {});
+    expect(world.resumeCalls).toEqual([
+      { resumeData: OPAQUE_BLOB },
+      { resumeData: "savable-nuevo-opaco" },
+    ]);
+    expect(world.sleeps).toEqual([2000]);
+    expect(readKvRecord(world)?.resumeData).toBe("savable-nuevo-opaco");
+    expect(res.resumed).toBe(true);
+  });
+
+  it("sin Accept-Ranges: fresh silencioso aunque haya savable", async () => {
+    const { deps, world } = savableDeps({ resumeOk: false });
+    const res = await downloadSeed(deps, "https://cdn.example/seed", "41", () => {});
+    expect(world.resumeCalls).toHaveLength(0);
+    expect(world.downloadCalls).toEqual([{ offset: 0 }]);
+    expect(world.removed).toContain("file:///tmp/seed-41.zip.part");
+    expect(res.resumed).toBe(false);
+  });
+});
+
+describe("prohibición de Range manual (W3.5)", () => {
+  it("ningún código de seed-expo pasa headers Range a downloadAsync", async () => {
+    const src = await readFile("src/db/seed-expo.ts", "utf8");
+    // Sin comentarios; el literal "accept-ranges" del HEAD check es
+    // detección de capacidad vigente (§W3.2), no un header de descarga.
+    const code = src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+      .replace(/["']accept-ranges["']/gi, "");
+    expect(code).not.toMatch(/range/i);
   });
 });

@@ -133,6 +133,8 @@ function fakeDeps(overrides: {
       async readRecord() {
         return null;
       },
+      // W3.4: reintentos con backoff; en tests el sleep es instantáneo.
+      async sleep() {},
       async writeRecord() {},
     },
     unzipApi: {

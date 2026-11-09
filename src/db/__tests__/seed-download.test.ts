@@ -101,6 +101,8 @@ function fakeDeps(opts: {
     async readRecord() {
       return record;
     },
+    // W3.4: reintentos con backoff; en tests el sleep es instantáneo.
+    async sleep() {},
     async writeRecord(_remote: string, rec) {
       record = { ...rec, updatedAt: rec.updatedAt };
       recordWrites.push({ partName: rec.partName, totalBytes: rec.totalBytes });
