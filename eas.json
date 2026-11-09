@@ -16,8 +16,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://diccionario-nasa-liart.vercel.app",
-        "EXPO_PUBLIC_SEED_BASE_URL": ""
+        "EXPO_PUBLIC_API_URL": "https://diccionario-nasa-liart.vercel.app"
       }
     },
     "production": {
@@ -25,8 +24,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://diccionario-nasa-liart.vercel.app",
-        "EXPO_PUBLIC_SEED_BASE_URL": ""
+        "EXPO_PUBLIC_API_URL": "https://diccionario-nasa-liart.vercel.app"
       }
     }
   },
