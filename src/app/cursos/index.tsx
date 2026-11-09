@@ -3,31 +3,16 @@ import { FlatList, Image, Text, TouchableOpacity, View, StyleSheet } from "react
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { useAuth } from "../../auth";
-import { SQLiteCourseStore } from "../../db/course-store";
 import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
-import { openDatabaseSync } from "expo-sqlite";
 import { theme } from "../../theme";
 import type { CourseRow } from "../../db/course-types";
 
 export default function Cursos() {
-  const { store, ready } = useDb();
+  const { store, courseStore } = useDb();
   const { session } = useAuth();
-  const [wordStore, setWordStore] = useState<any>(null);
   const router = useRouter();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [syncing, setSyncing] = useState(false);
-  const [courseStore, setCourseStore] = useState<SQLiteCourseStore | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (!store) return;
-      const db = openDatabaseSync("piiyaak.db");
-      const cs = await SQLiteCourseStore.open(db);
-      if (alive) setCourseStore(cs);
-    })();
-    return () => { alive = false; };
-  }, [store]);
 
   const loadCourses = async () => {
     if (!courseStore) return;

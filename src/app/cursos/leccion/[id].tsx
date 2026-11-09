@@ -46,8 +46,6 @@ import { ScrollView, Text, TouchableOpacity, View, StyleSheet, Image } from "rea
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDb } from "../../../db-context";
 import { useAuth } from "../../../auth";
-import { SQLiteCourseStore } from "../../../db/course-store";
-import { openDatabaseSync } from "expo-sqlite";
 import { apiFetch } from "../../../api";
 import { theme } from "../../../theme";
 import type { LessonRow } from "../../../db/course-types";
@@ -61,24 +59,19 @@ interface Block {
 
 export default function Leccion() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { store } = useDb();
+  const { store, courseStore } = useDb();
   const { session } = useAuth();
   const router = useRouter();
   const [lesson, setLesson] = useState<LessonRow | null>(null);
-  const [courseStore, setCourseStore] = useState<SQLiteCourseStore | null>(null);
   const [completed, setCompleted] = useState(false);
-  const [progressStore, setProgressStore] = useState<SQLiteCourseStore | null>(null);
   const [wordMap, setWordMap] = useState<Record<string, { spanish: string; nasaYuwe: string }>>({});
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!store || !id) return;
-      const db = openDatabaseSync("piiyaak.db");
-      const cs = await SQLiteCourseStore.open(db);
+      if (!store || !courseStore || !id) return;
+      const cs = courseStore;
       if (!alive) return;
-      setCourseStore(cs);
-      setProgressStore(cs);
       const l = await cs.getLesson(String(id));
       if (alive && l) setLesson(l);
       const p = await cs.getProgress(String(id));
@@ -104,7 +97,7 @@ export default function Leccion() {
       }
     })();
     return () => { alive = false; };
-  }, [store, id]);
+  }, [store, courseStore, id]);
 
   if (!lesson) {
     return <View style={styles.root}><Text style={styles.muted}>Cargando lección...</Text></View>;
@@ -128,10 +121,10 @@ export default function Leccion() {
       <TouchableOpacity
         style={[styles.btn, completed ? styles.btnDone : null]}
         onPress={async () => {
-          if (!progressStore || !id) return;
+          if (!courseStore || !id) return;
           const next = !completed;
           setCompleted(next);
-          await progressStore.setProgress(String(id), next, next ? 100 : null);
+          await courseStore.setProgress(String(id), next, next ? 100 : null);
           if (session) {
             apiFetch("/api/progress", { method: "POST", body: JSON.stringify({ lessonId: id, completed: next }) }, session).catch(() => {
               // queue for later sync

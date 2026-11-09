@@ -4,6 +4,7 @@ import { openDatabaseSync } from "expo-sqlite";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system";
 import { SQLiteWordStore, type WordStore, type OutboxRow } from "./db/sqlite-store";
+import { SQLiteCourseStore, type CourseStore } from "./db/course-store";
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
 import { useAuth } from "./auth";
@@ -12,8 +13,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { downloadAudio, removeAudio } from "./audio";
 import { downloadIllustration, removeIllustration } from "./illustrations";
 
+/**
+ * Contrato B2 (§1.2): el provider expone el store de cursos derivado de la
+ * MISMA instancia `SQLiteDatabase` que usa `SQLiteWordStore`. Forma admitida:
+ * valor adicional `courseStore` en `DbContextValue` (sin provider separado).
+ */
+export interface CourseStoreHandle {
+  courses: CourseStore;
+}
+
 interface DbContextValue {
   store: WordStore | null;
+  courseStore: CourseStore | null;
   ready: boolean;
   syncing: boolean;
   syncProgress: { done: number; total: number } | null;
@@ -34,6 +45,7 @@ const FAV_KEY = "piiyaak:favs";
 export function DbProvider({ children }: { children: React.ReactNode }) {
   const { session, ready: authReady } = useAuth();
   const [store, setStore] = useState<WordStore | null>(null);
+  const [courseStore, setCourseStore] = useState<CourseStore | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -66,8 +78,13 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       }
       const db = openDatabaseSync("piiyaak.db");
       const s = await SQLiteWordStore.open(db);
+      // Conexión única (B2): el store de cursos vive sobre la misma instancia
+      // SQLiteDatabase, de modo que las transacciones de syncCourses son
+      // efectivas y ninguna pantalla abre su propia conexión.
+      const cs = await SQLiteCourseStore.open(db);
       if (!alive) return;
       setStore(s);
+      setCourseStore(cs);
       storeRef.current = s;
       setLastSync(await s.getLastSync());
       try {
@@ -252,6 +269,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       store,
+      courseStore,
       ready: !!store,
       syncing,
       syncProgress,
@@ -265,7 +283,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       pendingOutboxCount,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount]
+    [store, courseStore, syncing, syncProgress, lastSync, favorites, historyWords, pendingOutboxCount]
   );
   return <DbContext.Provider value={value}>{children}</DbContext.Provider>;
 }

@@ -3,28 +3,23 @@ import { useFocusEffect } from "expo-router";
 import { ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDb } from "../../db-context";
-import { SQLiteCourseStore } from "../../db/course-store";
-import { openDatabaseSync } from "expo-sqlite";
 import { theme } from "../../theme";
 import type { CourseRow, ModuleRow, LessonRow } from "../../db/course-types";
 
 export default function CursoDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { store } = useDb();
+  const { courseStore } = useDb();
   const router = useRouter();
   const [course, setCourse] = useState<CourseRow | null>(null);
   const [modules, setModules] = useState<ModuleRow[]>([]);
-  const [courseStore, setCourseStore] = useState<SQLiteCourseStore | null>(null);
   const [progressMap, setProgressMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!store || !id) return;
-      const db = openDatabaseSync("piiyaak.db");
-      const cs = await SQLiteCourseStore.open(db);
+      if (!courseStore || !id) return;
+      const cs = courseStore;
       if (!alive) return;
-      setCourseStore(cs);
       const c = await cs.getCourse(String(id));
       if (alive && c) setCourse(c);
       const mods = await cs.getModules(String(id));
@@ -45,7 +40,7 @@ export default function CursoDetail() {
       }
     })();
     return () => { alive = false; };
-  }, [store, id]);
+  }, [courseStore, id]);
 
   // Refresh progress when returning from a lesson
   useFocusEffect(
