@@ -1,6 +1,11 @@
 import { apiFetch, type SessionState } from "../api";
 import type { WordStore, OutboxRow } from "./sqlite-store";
 import type { SyncResult, WordRow } from "./types";
+import {
+  getLocalVersion,
+  getRemoteVersion,
+  setLocalVersion,
+} from "./version-gate";
 
 export class AuthError extends Error {
   constructor(message = "auth required") {
@@ -123,16 +128,42 @@ export async function incrementalSync(
   return { applied, removed, serverTime, hasMore: false };
 }
 
-/** Primera vez: seed; después: deltas. */
+/**
+ * Primera vez: seed; después: deltas. Gate de versión (B1):
+ * - Igualdad exacta local==remota → sin red adicional, retorna vacío.
+ * - Distinta o ausente → rama existente (seed o incremental con `since`
+ *   reutilizado) y adopción del gate vía escritura conjunta.
+ * - Versión inalcanzable (offline) con bundle → resuelve local sin lanzar.
+ * Acepta `session = null`: la lectura nunca exige autenticación.
+ */
 export async function syncNow(
   store: WordStore,
   session: SessionState | null,
   onProgress?: (done: number, total: number) => void
 ): Promise<SyncResult> {
+  const local = await getLocalVersion(store);
   const hasData = (await store.count()) > 0;
-  const lastSync = await store.getLastSync();
-  if (!hasData || !lastSync) return fullSeed(store, session, onProgress);
-  return incrementalSync(store, session, onProgress);
+  let remote: { contentVersion: string; serverTime: string };
+  try {
+    remote = await getRemoteVersion(session);
+  } catch (e) {
+    if (hasData && local.lastSync) {
+      return { applied: 0, removed: 0, serverTime: local.lastSync, hasMore: false };
+    }
+    throw e;
+  }
+  if (local.contentVersion !== null && local.contentVersion === remote.contentVersion) {
+    return { applied: 0, removed: 0, serverTime: remote.serverTime, hasMore: false };
+  }
+  const res =
+    !hasData || !local.lastSync
+      ? await fullSeed(store, session, onProgress)
+      : await incrementalSync(store, session, onProgress);
+  await setLocalVersion(store, {
+    contentVersion: remote.contentVersion,
+    serverTime: res.serverTime ?? remote.serverTime,
+  });
+  return res;
 }
 
 /** Drena el outbox a la plataforma (favoritas + historial). */
