@@ -61,7 +61,7 @@ export default function Escucha() {
     let alive = true;
     (async () => {
       if (!store) return;
-      const all = await store.listAZ(null, 50, 0);
+      const all = await store.listAZ(null, 200, 0);
       if (!alive) return;
       const pool = shuffle((all as WordRow[]).filter((w) => !!w.audioUrl));
       const chosen = pool.slice(0, MAX_ROUNDS);
