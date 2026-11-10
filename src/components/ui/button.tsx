@@ -5,6 +5,7 @@
  * accesible. Zona táctil mínima del token (44pt).
  */
 import { Pressable, ActivityIndicator, StyleSheet } from "react-native";
+import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { theme, radiusScale, spacing, shadows, minHit } from "../../theme";
 import { ThemedText } from "./themed-text";
@@ -17,6 +18,7 @@ export interface ButtonProps {
   variant?: ButtonVariant;
   disabled?: boolean;
   loading?: boolean;
+  icon?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -35,6 +37,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: spacing.sm,
   },
   primary: {
     backgroundColor: theme.primary,
@@ -66,6 +70,7 @@ export function Button({
   variant = "primary",
   disabled,
   loading,
+  icon,
   style,
 }: ButtonProps) {
   const inactive = disabled || loading;
@@ -85,6 +90,7 @@ export function Button({
         style,
       ]}
     >
+      {!loading && icon ? icon : null}
       {loading ? (
         <ActivityIndicator color={FOREGROUND[variant]} />
       ) : (

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { ScrollView, View, StyleSheet } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { BookOpen, Volume2, Heart } from "lucide-react-native";
 import { useDb } from "../../db-context";
-import { theme } from "../../theme";
+import { theme, fonts, spacing } from "../../theme";
 import type { WordRow } from "../../db/types";
 import { createAudioPlayer, type AudioPlayer } from "../../audio-player";
 import { resolveAudioUri } from "../../audio";
 import { resolveIllustrationUri } from "../../illustrations";
 import { WordIllustration } from "../../components/word-illustration";
+import { Screen, ThemedText, Card, Button, Chip } from "../../components/ui";
 
 export default function Ficha() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -86,9 +88,13 @@ export default function Ficha() {
 
   if (!word) {
     return (
-      <View style={styles.root}>
-        <Text style={styles.muted}>Cargando ficha...</Text>
-      </View>
+      <Screen>
+        <View style={styles.loading}>
+          <ThemedText variant="body" style={styles.muted}>
+            Cargando ficha...
+          </ThemedText>
+        </View>
+      </Screen>
     );
   }
 
@@ -126,47 +132,144 @@ export default function Ficha() {
   };
 
   return (
-    <ScrollView style={styles.root}>
-      <WordIllustration url={illustrationSrc} alt={word.spanish} />
-      <Text style={styles.es}>{word.spanish}</Text>
-      <Text style={styles.ny}>{word.nasaYuwe}</Text>
-      {word.pronunciation ? <Text style={styles.pron}>[{word.pronunciation}]</Text> : null}
-      {word.category ? <Text style={styles.cat}>{word.category}</Text> : null}
-      {word.culturalContext ? <Text style={styles.ctx}>{word.culturalContext}</Text> : null}
-      {word.examples ? <Text style={styles.examples}>Ejemplos: {word.examples}</Text> : null}
-      {word.audioUrl ? (
-        <TouchableOpacity
-          style={styles.audioBtn}
-          onPress={togglePlay}
-          disabled={loading}
-        >
-          <Text style={styles.audioText}>
-            {loading ? "..." : playing ? "⏸ Pausar" : "▶ Reproducir"}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-      <TouchableOpacity
-        style={[styles.fav, isFav && styles.favOn]}
-        onPress={() => toggleFavorite(word)}
+    <Screen>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
       >
-        <Text style={styles.favText}>{isFav ? "★ En favoritas" : "☆ Guardar en favoritas"}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <WordIllustration url={illustrationSrc} alt={word.spanish} />
+        <ThemedText variant="word" style={styles.spanishTitle}>
+          {word.spanish}
+        </ThemedText>
+        <View style={styles.nyRow}>
+          <BookOpen size={20} color={theme.primary} />
+          <ThemedText variant="caption" style={styles.nyLabel}>
+            Nasa Yuwe:
+          </ThemedText>
+          {word.nasaYuwe ? (
+            <ThemedText variant="body" style={styles.nyWord}>
+              {word.nasaYuwe}
+            </ThemedText>
+          ) : (
+            <ThemedText variant="body" style={styles.muted}>
+              Traducción no disponible aún
+            </ThemedText>
+          )}
+        </View>
+        {word.pronunciation ? (
+          <Card>
+            <View style={styles.pronHeader}>
+              <Volume2 size={20} color={theme.primary} />
+              <ThemedText variant="caption" style={styles.pronCaption}>
+                Pronunciación fonética
+              </ThemedText>
+            </View>
+            <ThemedText variant="heading" style={styles.pronText}>
+              [{word.pronunciation}]
+            </ThemedText>
+          </Card>
+        ) : (
+          <Card style={styles.mutedCard}>
+            <ThemedText variant="body" style={styles.muted}>
+              Pronunciación no disponible
+            </ThemedText>
+          </Card>
+        )}
+        {word.audioUrl ? (
+          <Button
+            title={loading ? "..." : playing ? "Pausar" : "Reproducir"}
+            onPress={togglePlay}
+            variant="primary"
+            disabled={loading}
+            icon={<Volume2 size={20} color={theme.onTint} />}
+            style={styles.fullWidth}
+          />
+        ) : null}
+        {word.category ? (
+          <Chip label={word.category} tone="accent" />
+        ) : (
+          <ThemedText variant="caption" style={styles.muted}>
+            Categoría desconocida
+          </ThemedText>
+        )}
+        {word.culturalContext ? (
+          <Card>
+            <ThemedText variant="body">{word.culturalContext}</ThemedText>
+          </Card>
+        ) : null}
+        {word.examples ? (
+          <ThemedText variant="body" style={styles.examples}>
+            Ejemplos: {word.examples}
+          </ThemedText>
+        ) : null}
+        <Button
+          title={isFav ? "En favoritas" : "Guardar en favoritas"}
+          onPress={() => toggleFavorite(word)}
+          variant="secondary"
+          icon={
+            <Heart
+              size={20}
+              color={theme.primary}
+              fill={isFav ? theme.primary : "transparent"}
+            />
+          }
+          style={styles.fullWidth}
+        />
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.background, padding: 16 },
-  muted: { color: theme.muted, textAlign: "center" as const, marginTop: 32 },
-  pron: { color: theme.muted, marginTop: 4 },
-  es: { fontSize: 30, fontWeight: "bold" as const },
-  ny: { fontSize: 24, color: theme.primary, marginTop: 4 },
-  cat: { marginTop: 8, color: theme.muted },
-  ctx: { marginTop: 12, fontSize: 15, lineHeight: 22 },
-  examples: { marginTop: 12, fontSize: 15, lineHeight: 22, fontStyle: "italic" as const },
-  audioBtn: { marginTop: 16, padding: 12, borderRadius: theme.radius, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: "center" as const },
-  audioText: { fontSize: 16, fontWeight: "600" as const, color: theme.primary },
-  fav: { marginTop: 20, padding: 14, borderRadius: theme.radius, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, alignItems: "center" as const },
-  favOn: { borderColor: theme.primary },
-  favText: { fontSize: 16, fontWeight: "600" as const, color: theme.primary },
+  scroll: { flex: 1 },
+  content: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  muted: { color: theme.muted },
+  spanishTitle: {
+    color: theme.primary,
+  },
+  nyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexWrap: "wrap",
+  },
+  nyLabel: {
+    color: theme.muted,
+  },
+  nyWord: {
+    fontFamily: fonts.serifSemibold,
+    color: theme.primary,
+  },
+  pronHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  pronCaption: {
+    color: theme.muted,
+  },
+  pronText: {
+    color: theme.primary,
+  },
+  mutedCard: {
+    backgroundColor: theme.background,
+  },
+  fullWidth: {
+    width: "100%",
+  },
+  examples: {
+    fontStyle: "italic",
+  },
 });
