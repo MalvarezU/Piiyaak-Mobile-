@@ -6,6 +6,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "types": [
+      "node",
       "vitest/globals"
     ]
   },

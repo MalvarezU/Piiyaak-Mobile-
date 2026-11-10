@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
-import { FlatList, Image, Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { FlatList, Image, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
+import { GraduationCap, RefreshCw, ArrowRight } from "lucide-react-native";
 import { useDb } from "../../db-context";
 import { useAuth } from "../../auth";
 import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
 import { resolveCachedUri } from "../../db/media-fs";
-import { theme } from "../../theme";
+import { EmptyState } from "../../components/empty-state";
+import { Screen, ThemedText, Card, Button, Chip } from "../../components/ui";
+import { theme, fonts, spacing, radiusScale } from "../../theme";
 import type { CourseRow } from "../../db/course-types";
 
 /**
@@ -42,15 +45,15 @@ export default function Cursos() {
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [syncing, setSyncing] = useState(false);
 
-  const loadCourses = async () => {
+  const loadCourses = useCallback(async () => {
     if (!courseStore) return;
     const cs = await courseStore.getCourses();
     setCourses(cs);
-  };
+  }, [courseStore]);
 
   useEffect(() => {
     loadCourses();
-  }, [courseStore]);
+  }, [loadCourses]);
 
   const handleSync = async () => {
     if (!courseStore) return;
@@ -69,38 +72,176 @@ export default function Cursos() {
   };
 
   return (
-    <View style={styles.root}>
-      <Text style={styles.title}>Cursos</Text>
-      <TouchableOpacity style={styles.syncBtn} onPress={handleSync} disabled={syncing || !courseStore}>
-        <Text style={styles.syncText}>{syncing ? "Sincronizando..." : "Sincronizar cursos"}</Text>
-      </TouchableOpacity>
+    <Screen>
+      <View style={styles.header}>
+        <ThemedText variant="title">Cursos</ThemedText>
+        <ThemedText variant="body" style={styles.subtitle}>
+          Aprende con lecciones estructuradas
+        </ThemedText>
+      </View>
+      <View style={styles.syncWrap}>
+        <Button
+          title={syncing ? "Sincronizando..." : "Sincronizar cursos"}
+          variant="secondary"
+          icon={<RefreshCw size={16} color={theme.primary} />}
+          disabled={syncing || !courseStore}
+          onPress={handleSync}
+          style={styles.syncBtn}
+        />
+      </View>
       <FlatList
         data={courses}
         keyExtractor={(c) => c.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push({ pathname: "/cursos/[id]", params: { id: item.id } })}
-          >
-            {item.coverImage ? <CourseCover courseId={item.id} uri={item.coverImage} /> : null}
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            {item.description ? <Text style={styles.cardDesc}>{item.description}</Text> : null}
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={<Text style={styles.muted}>Sin cursos. Sincroniza para descargar.</Text>}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <EmptyState
+            message="Sin cursos. Sincroniza para descargar."
+            icon={<GraduationCap size={48} color={theme.muted} />}
+          />
+        }
+        renderItem={({ item }) => {
+          const pct = item.progressPct;
+          let chip: { label: string; tone: "neutral" | "success" | "accent" } | null = null;
+          if (pct === 100) chip = { label: "Completado", tone: "success" };
+          else if (typeof pct === "number" && pct > 0 && pct < 100)
+            chip = { label: "En curso", tone: "accent" };
+          else if (pct === null) chip = { label: "Sin contenido", tone: "neutral" };
+
+          return (
+            <Card
+              style={styles.card}
+              onPress={() =>
+                router.push({ pathname: "/cursos/[id]", params: { id: item.id } })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={item.title}
+            >
+              <View style={styles.coverWrap}>
+                {item.coverImage ? (
+                  <CourseCover courseId={item.id} uri={item.coverImage} />
+                ) : (
+                  <View style={styles.coverPlaceholder}>
+                    <GraduationCap size={48} color={theme.muted} />
+                  </View>
+                )}
+                {chip ? (
+                  <Chip
+                    label={chip.label}
+                    tone={chip.tone}
+                    style={styles.chip}
+                  />
+                ) : null}
+              </View>
+              <View style={styles.cardBody}>
+                <View style={styles.cardRow}>
+                  <View style={styles.cardText}>
+                    <ThemedText
+                      variant="bodyMedium"
+                      style={{ fontFamily: fonts.sansSemibold }}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </ThemedText>
+                    {item.description ? (
+                      <ThemedText
+                        variant="caption"
+                        numberOfLines={2}
+                        style={styles.cardDesc}
+                      >
+                        {item.description}
+                      </ThemedText>
+                    ) : null}
+                    {typeof pct === "number" && pct > 0 ? (
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${pct}%` },
+                          ]}
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                  <ArrowRight size={18} color={theme.muted} />
+                </View>
+              </View>
+            </Card>
+          );
+        }}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.background, padding: 16 },
-  title: { fontSize: 28, fontWeight: "bold", color: theme.primary, textAlign: "center", marginBottom: 12 },
-  syncBtn: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 10, alignItems: "center", marginBottom: 12, borderWidth: 1, borderColor: theme.border },
-  syncText: { fontSize: 15, fontWeight: "600", color: theme.primary },
-  card: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: theme.border },
-  cover: { width: "100%", height: 120, borderRadius: theme.radius, marginBottom: 8 },
-  cardTitle: { fontSize: 18, fontWeight: "600" },
-  cardDesc: { fontSize: 14, color: theme.muted, marginTop: 4 },
-  muted: { color: theme.muted, textAlign: "center", marginTop: 32 },
+  header: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  subtitle: { color: theme.muted },
+  syncWrap: {
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  syncBtn: {
+    width: "100%",
+  },
+  list: { flex: 1, marginTop: spacing.sm },
+  listContent: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  card: {
+    padding: 0,
+    overflow: "hidden",
+  },
+  coverWrap: {
+    position: "relative",
+    width: "100%",
+  },
+  cover: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+  },
+  coverPlaceholder: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: theme.successSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chip: {
+    position: "absolute",
+    top: spacing.sm,
+    left: spacing.sm,
+  },
+  cardBody: {
+    padding: spacing.md,
+  },
+  cardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  cardText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  cardDesc: {
+    color: theme.muted,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: radiusScale.full,
+    backgroundColor: theme.successSoft,
+    overflow: "hidden",
+    marginTop: spacing.xs,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: theme.primary,
+  },
 });
