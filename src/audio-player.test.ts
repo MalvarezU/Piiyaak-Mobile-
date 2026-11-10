@@ -1,61 +1,63 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("expo-av", () => {
+vi.mock("expo-audio", () => {
   interface FakeState {
     uri: string;
     played: number;
     paused: number;
-    unloaded: number;
+    removed: number;
     statusCb: ((s: { isLoaded: boolean; didJustFinish?: boolean }) => void) | null;
   }
-  const sounds: FakeState[] = [];
-  const createAsync = vi.fn(async (source: { uri: string }) => {
+  const players: FakeState[] = [];
+  const createAudioPlayer = vi.fn((source: string) => {
     const state: FakeState = {
-      uri: source.uri,
+      uri: source,
       played: 0,
       paused: 0,
-      unloaded: 0,
+      removed: 0,
       statusCb: null,
     };
-    sounds.push(state);
-    const sound = {
-      async playAsync() {
+    players.push(state);
+    const player = {
+      play() {
         state.played++;
       },
-      async pauseAsync() {
+      pause() {
         state.paused++;
       },
-      async unloadAsync() {
-        state.unloaded++;
+      remove() {
+        state.removed++;
       },
-      setOnPlaybackStatusUpdate(
+      addListener(
+        _event: string,
         cb: (s: { isLoaded: boolean; didJustFinish?: boolean }) => void
       ) {
         state.statusCb = cb;
+        return { remove: vi.fn() };
       },
     };
-    return { sound, status: { isLoaded: true } };
+    return player;
   });
-  return { Audio: { Sound: { createAsync } }, __testSounds: sounds };
+  return { createAudioPlayer, __testPlayers: players };
 });
 
-import { Audio } from "expo-av";
+import { createAudioPlayer as mockCreate } from "expo-audio";
 import { createAudioPlayer, type AudioPlayerBackend } from "./audio-player";
 
-const mockedCreate = Audio.Sound.createAsync as unknown as ReturnType<typeof vi.fn>;
-const { __testSounds } = (await import("expo-av")) as unknown as {
-  __testSounds: Array<{
+const mockedCreate = mockCreate as unknown as ReturnType<typeof vi.fn>;
+const { __testPlayers } = (await import("expo-audio")) as unknown as {
+  __testPlayers: Array<{
     uri: string;
     played: number;
     paused: number;
-    unloaded: number;
+    removed: number;
     statusCb: ((s: { isLoaded: boolean; didJustFinish?: boolean }) => void) | null;
   }>;
 };
 
 beforeEach(() => {
   mockedCreate.mockClear();
-  __testSounds.length = 0;
+  __testPlayers.length = 0;
 });
 
 /**
@@ -67,15 +69,13 @@ describe("AudioPlayer (B4-02)", () => {
     const player = createAudioPlayer();
     await player.load("https://cdn.example.com/a.mp3");
     expect(mockedCreate).toHaveBeenCalledTimes(1);
-    expect(mockedCreate.mock.calls[0]![0]).toEqual({
-      uri: "https://cdn.example.com/a.mp3",
-    });
+    expect(mockedCreate.mock.calls[0]![0]).toBe("https://cdn.example.com/a.mp3");
     await player.play();
     await player.pause();
     await player.unload();
-    expect(__testSounds[0]!.played).toBe(1);
-    expect(__testSounds[0]!.paused).toBe(1);
-    expect(__testSounds[0]!.unloaded).toBe(1);
+    expect(__testPlayers[0]!.played).toBe(1);
+    expect(__testPlayers[0]!.paused).toBe(1);
+    expect(__testPlayers[0]!.removed).toBe(1);
   });
 
   it("load reemplaza el sonido anterior con unload previo", async () => {
@@ -83,8 +83,8 @@ describe("AudioPlayer (B4-02)", () => {
     await player.load("https://cdn.example.com/a.mp3");
     await player.load("https://cdn.example.com/b.mp3");
     expect(mockedCreate).toHaveBeenCalledTimes(2);
-    expect(__testSounds[0]!.unloaded).toBe(1);
-    expect(__testSounds[1]!.uri).toBe("https://cdn.example.com/b.mp3");
+    expect(__testPlayers[0]!.removed).toBe(1);
+    expect(__testPlayers[1]!.uri).toBe("https://cdn.example.com/b.mp3");
   });
 
   it("play/pause/unload sin load previo no lanzan", async () => {
@@ -101,16 +101,18 @@ describe("AudioPlayer (B4-02)", () => {
       async createSound(uri: string) {
         calls.push(`create:${uri}`);
         return {
-          async playAsync() {
+          play() {
             calls.push("play");
           },
-          async pauseAsync() {
+          pause() {
             calls.push("pause");
           },
-          async unloadAsync() {
+          remove() {
             calls.push("unload");
           },
-          setOnPlaybackStatusUpdate() {},
+          addListener() {
+            return { remove: () => {} };
+          },
         };
       },
     };
@@ -132,7 +134,7 @@ describe("AudioPlayer (B4-02)", () => {
     const player = createAudioPlayer();
     const finished = vi.fn();
     await player.load("https://cdn.example.com/a.mp3", finished);
-    __testSounds[0]!.statusCb?.({ isLoaded: true, didJustFinish: true });
+    __testPlayers[0]!.statusCb?.({ isLoaded: true, didJustFinish: true });
     expect(finished).toHaveBeenCalledTimes(1);
   });
 });

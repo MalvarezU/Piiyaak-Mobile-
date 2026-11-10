@@ -15,7 +15,7 @@
  *   cero igual completa correcto (solo pierde bytes, no integridad).
  * - `ATTACH DATABASE` requiere ruta cruda: se despoja el prefijo `file://`.
  */
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { openDatabaseSync, type SQLiteDatabase } from "expo-sqlite";
 import { setLocalVersion } from "./version-gate";
 import { seedCopySql, type SeedUserTable } from "./seed-swap";

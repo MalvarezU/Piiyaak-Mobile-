@@ -6,7 +6,7 @@
  * Node: los tests usan `createMemoryMediaStore` o el mock
  * `src/db/__mocks__/expo-file-system` (vía `vi.mock`).
  */
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   createMediaCache,
   type MediaCache,

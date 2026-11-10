@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+vi.mock("react-native", () => ({ EventEmitter: class {} }));
 
 vi.mock("expo-file-system", () => import("./__mocks__/expo-file-system"));
+vi.mock("expo-file-system/legacy", () => import("./__mocks__/expo-file-system"));
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { __reset, __listAll } from "./__mocks__/expo-file-system";
 import {
   createMediaCache,

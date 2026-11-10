@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { AppState, type AppStateStatus } from "react-native";
 import { openDatabaseSync, type SQLiteDatabase } from "expo-sqlite";
 import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { SQLiteWordStore, type WordStore, type OutboxRow } from "./db/sqlite-store";
 import { SQLiteCourseStore, type CourseStore } from "./db/course-store";
 import { seedReducer, type SeedEvent, type SeedState } from "./db/seed-machine";

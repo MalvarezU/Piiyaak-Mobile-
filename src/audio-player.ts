@@ -1,10 +1,9 @@
-import { Audio } from "expo-av";
+import { createAudioPlayer as createExpoAudioPlayer } from "expo-audio";
 
 /**
- * Adaptador de audio (B4-02, R2): aísla `expo-av` tras una interfaz para
- * no migrar a `expo-audio` en este change. `expo-av` 16 permanece como
- * backend por defecto; la sustitución futura solo cambia el `backend`
- * inyectado, nunca la firma consumida por ficha y ListeningPlayer.
+ * Adaptador de audio (B4-02, R2): aísla `expo-audio` tras una interfaz para
+ * que la migración SDK 55 solo cambie el `backend` inyectado, nunca la firma
+ * consumida por ficha, Escucha y ListeningPlayer.
  */
 
 export interface AudioPlayer {
@@ -14,43 +13,51 @@ export interface AudioPlayer {
   unload(): Promise<void>;
 }
 
-/** Superficie mínima de `expo-av` que usa el adaptador (sustituible). */
+/** Superficie mínima de `expo-audio` que usa el adaptador (sustituible). */
 export interface AudioPlayerSound {
-  playAsync(): Promise<unknown>;
-  pauseAsync(): Promise<unknown>;
-  unloadAsync(): Promise<unknown>;
-  setOnPlaybackStatusUpdate(
+  play(): void;
+  pause(): void;
+  remove(): void;
+  addListener(
+    event: "playbackStatusUpdate",
     cb: (status: { isLoaded: boolean; didJustFinish?: boolean }) => void
-  ): void;
+  ): { remove: () => void };
 }
 
 export interface AudioPlayerBackend {
   createSound(uri: string): Promise<AudioPlayerSound>;
 }
 
-const expoAvBackend: AudioPlayerBackend = {
+const expoAudioBackend: AudioPlayerBackend = {
   async createSound(uri: string): Promise<AudioPlayerSound> {
-    const { sound } = await Audio.Sound.createAsync(
-      { uri },
-      { shouldPlay: false }
-    );
-    return sound as unknown as AudioPlayerSound;
+    const player = createExpoAudioPlayer(uri);
+    return player as unknown as AudioPlayerSound;
   },
 };
 
 export function createAudioPlayer(
-  backend: AudioPlayerBackend = expoAvBackend
+  backend: AudioPlayerBackend = expoAudioBackend
 ): AudioPlayer {
   let current: AudioPlayerSound | null = null;
   let onFinished: (() => void) | null = null;
+  let subscription: { remove: () => void } | null = null;
 
   const unloadCurrent = async (): Promise<void> => {
     const previous = current;
+    const prevSub = subscription;
     current = null;
     onFinished = null;
+    subscription = null;
+    if (prevSub) {
+      try {
+        prevSub.remove();
+      } catch {
+        // best-effort
+      }
+    }
     if (previous) {
       try {
-        await previous.unloadAsync();
+        previous.remove();
       } catch {
         // best-effort: descargar dos veces no debe lanzar
       }
@@ -63,19 +70,19 @@ export function createAudioPlayer(
       const sound = await backend.createSound(uri);
       current = sound;
       onFinished = finished ?? null;
-      sound.setOnPlaybackStatusUpdate((status) => {
+      subscription = sound.addListener("playbackStatusUpdate", (status) => {
         if (status.isLoaded && status.didJustFinish) onFinished?.();
       });
     },
 
     async play(): Promise<void> {
       if (!current) return;
-      await current.playAsync();
+      current.play();
     },
 
     async pause(): Promise<void> {
       if (!current) return;
-      await current.pauseAsync();
+      current.pause();
     },
 
     async unload(): Promise<void> {

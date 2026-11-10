@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { defaultMediaCache } from "./db/media-fs";
 import type { MediaRef } from "./db/media-cache";
 
