@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { CheckCircle2, RotateCcw, Volume2 } from "lucide-react-native";
 import { theme, spacing, radiusScale, minHit } from "../theme";
+import { toAbsoluteUrl } from "../api";
 import { resolveCachedUri } from "../db/media-fs";
 import { createAudioPlayer, type AudioPlayer } from "../audio-player";
 import { Button, ThemedText } from "./ui";
@@ -42,7 +43,7 @@ export function ListeningBlock({
 }: ListeningBlockProps) {
   const [elegida, setElegida] = useState<number | null>(null);
   const [estado, setEstado] = useState<Estado>("jugando");
-  const [audioUri, setAudioUri] = useState<string | null>(mediaUrl);
+  const [audioUri, setAudioUri] = useState<string | null>(() => (mediaUrl ? toAbsoluteUrl(mediaUrl) : null));
   const firedRef = useRef(false);
 
   useEffect(() => {
@@ -51,11 +52,12 @@ export function ListeningBlock({
       setAudioUri(null);
       return;
     }
-    setAudioUri(mediaUrl);
+    const abs = toAbsoluteUrl(mediaUrl);
+    setAudioUri(abs);
     resolveCachedUri({
       wordId: `lesson:${audioKey}`,
       kind: "audio",
-      url: mediaUrl,
+      url: abs,
       sha256: null,
     })
       .then((uri) => {

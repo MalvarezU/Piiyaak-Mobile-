@@ -6,6 +6,7 @@ import { useDb } from "../../db-context";
 import { useAuth } from "../../auth";
 import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
 import { resolveCachedUri } from "../../db/media-fs";
+import { toAbsoluteUrl } from "../../api";
 import { EmptyState } from "../../components/empty-state";
 import { Screen, ThemedText, Card, Button, Chip } from "../../components/ui";
 import { theme, fonts, spacing, radiusScale, type, minHit } from "../../theme";
@@ -17,10 +18,11 @@ import type { CourseRow } from "../../db/course-types";
  * cachearon por `wordId`), por lo que no hay doble lookup.
  */
 function CourseCover({ courseId, uri }: { courseId: string; uri: string }) {
-  const [src, setSrc] = useState(uri);
+  const [src, setSrc] = useState(() => toAbsoluteUrl(uri));
   useEffect(() => {
     let alive = true;
-    setSrc(uri);
+    const abs = toAbsoluteUrl(uri);
+    setSrc(abs);
     resolveCachedUri({
       wordId: `course:${courseId}`,
       kind: "illustration",

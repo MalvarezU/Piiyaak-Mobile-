@@ -9,6 +9,15 @@
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? "https://diccionario-nasa-liart.vercel.app";
 
+/**
+ * Normaliza una URL de medio a absoluta: el backend sirve rutas relativas
+ * ("/audio/x.mp3", "/ybc.jpg") que la web resuelve contra su origin; en
+ * nativo se resuelven contra la URL base de la API.
+ */
+export function toAbsoluteUrl(url: string): string {
+  return url.startsWith("/") ? `${API_BASE_URL}${url}` : url;
+}
+
 // Hardening: en producción la URL base debe ser HTTPS.
 if (typeof __DEV__ !== "undefined" && !__DEV__ && !API_BASE_URL.startsWith("https://")) {
   throw new Error("API_BASE_URL debe usar HTTPS en producción");

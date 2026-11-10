@@ -3,7 +3,7 @@ import { ScrollView, View, StyleSheet, Image, Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useDb } from "../../../db-context";
 import { useAuth } from "../../../auth";
-import { apiFetch } from "../../../api";
+import { apiFetch, toAbsoluteUrl } from "../../../api";
 import { theme, spacing, radiusScale, fonts } from "../../../theme";
 import { resolveCachedUri } from "../../../db/media-fs";
 import { resolveAudioUri } from "../../../audio";
@@ -72,14 +72,15 @@ function CachedLessonImage({
   url: string;
   caption?: string;
 }) {
-  const [src, setSrc] = useState(url);
+  const [src, setSrc] = useState(() => toAbsoluteUrl(url));
   useEffect(() => {
     let alive = true;
-    setSrc(url);
+    const abs = toAbsoluteUrl(url);
+    setSrc(abs);
     resolveCachedUri({
       wordId: `lesson:${lessonId}`,
       kind: "illustration",
-      url,
+      url: abs,
       sha256: null,
     })
       .then((resolved) => {
@@ -103,14 +104,15 @@ function CachedLessonImage({
 }
 
 function CachedLessonAudio({ lessonId, url }: { lessonId: string; url: string }) {
-  const [resolved, setResolved] = useState(url);
+  const [resolved, setResolved] = useState(() => toAbsoluteUrl(url));
   useEffect(() => {
     let alive = true;
-    setResolved(url);
+    const abs = toAbsoluteUrl(url);
+    setResolved(abs);
     resolveCachedUri({
       wordId: `lesson:${lessonId}`,
       kind: "audio",
-      url,
+      url: abs,
       sha256: null,
     })
       .then((r) => {
