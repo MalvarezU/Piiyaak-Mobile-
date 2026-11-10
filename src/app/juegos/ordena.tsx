@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Text, TouchableOpacity, View, StyleSheet, ScrollView } from "react-native";
+import { TouchableOpacity, View, StyleSheet, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
-import { theme } from "../../theme";
+import { theme, spacing, radiusScale, shadows } from "../../theme";
+import { Screen, ThemedText, Button } from "../../components/ui";
 import type { WordRow } from "../../db/types";
 import { tokenizeOrdena, isOrdenaEligible } from "../../lib/ordena-tokenizer";
 
@@ -53,6 +54,7 @@ export default function Ordena() {
 
   useEffect(() => {
     if (store) loadWord();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
   const handleTileTap = (tile: Tile) => {
@@ -85,82 +87,160 @@ export default function Ordena() {
     }
   };
 
-  if (!store) return <View style={styles.root}><Text style={styles.muted}>Preparando...</Text></View>;
-  if (!word) return <View style={styles.root}><Text style={styles.muted}>Cargando...</Text></View>;
+  if (!store) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <ThemedText variant="body" style={styles.muted}>Preparando...</ThemedText>
+        </View>
+      </Screen>
+    );
+  }
+  if (!word) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <ThemedText variant="body" style={styles.muted}>Cargando...</ThemedText>
+        </View>
+      </Screen>
+    );
+  }
 
   if (done) {
     return (
-      <View style={styles.root}>
-        <Text style={styles.title}>¡Terminado!</Text>
-        <Text style={styles.score}>Aciertos: {score} / {TOTAL}</Text>
-        <TouchableOpacity style={styles.btn} onPress={() => { setDone(false); setRound(0); setScore(0); loadWord(); }}>
-          <Text style={styles.btnText}>Reintentar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.link} onPress={() => router.back()}>
-          <Text style={styles.linkText}>Volver</Text>
-        </TouchableOpacity>
-      </View>
+      <Screen>
+        <View style={styles.doneContainer}>
+          <ThemedText variant="title" style={styles.doneTitle}>¡Terminado!</ThemedText>
+          <ThemedText variant="title" style={styles.score}>Aciertos: {score} / {TOTAL}</ThemedText>
+          <Button title="Reintentar" onPress={() => { setDone(false); setRound(0); setScore(0); loadWord(); }} style={styles.fullBtn} />
+          <TouchableOpacity style={styles.link} onPress={() => router.back()}>
+            <ThemedText variant="body" style={styles.linkText}>Volver</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.progress}>Ronda {round + 1} / {TOTAL} | Puntaje: {score}</Text>
-      <Text style={styles.prompt}>Ordena las fichas para formar:</Text>
-      <Text style={styles.word}>{word.spanish}</Text>
-      <View style={styles.placedRow}>
-        {placed.map((t) => (
-          <TouchableOpacity key={t.id} style={styles.placedTile} onPress={() => handleUndo(t)}>
-            <Text style={styles.tileText}>{t.text}</Text>
-          </TouchableOpacity>
-        ))}
-        {placed.length === 0 ? <Text style={styles.placeholder}>Toca las fichas de abajo</Text> : null}
-      </View>
-      {checked ? (
-        <Text style={[styles.result, correct ? styles.ok : styles.bad]}>
-          {correct ? "✓ Correcto" : `✗ Respuesta: ${word.nasaYuwe}`}
-        </Text>
-      ) : null}
-      <View style={styles.tilesRow}>
-        {tiles.map((t) => (
-          <TouchableOpacity key={t.id} style={styles.tile} onPress={() => handleTileTap(t)}>
-            <Text style={styles.tileText}>{t.text}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      {!checked ? (
-        <TouchableOpacity style={styles.btn} onPress={handleCheck} disabled={placed.length === 0}>
-          <Text style={styles.btnText}>Comprobar</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity style={styles.btn} onPress={handleNext}>
-          <Text style={styles.btnText}>Siguiente</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content}>
+        <ThemedText variant="caption" style={styles.progress}>
+          Ronda {round + 1} / {TOTAL} | Puntaje: {score}
+        </ThemedText>
+        <ThemedText variant="body" style={styles.prompt}>
+          Ordena las fichas para formar:
+        </ThemedText>
+        <ThemedText variant="word" style={styles.word}>
+          {word.spanish}
+        </ThemedText>
+
+        <View style={styles.placedRow}>
+          {placed.map((t) => (
+            <TouchableOpacity key={t.id} style={styles.placedTile} onPress={() => handleUndo(t)} activeOpacity={0.85}>
+              <ThemedText variant="heading" style={styles.placedTileText}>{t.text}</ThemedText>
+            </TouchableOpacity>
+          ))}
+          {placed.length === 0 ? (
+            <ThemedText variant="caption" style={styles.placeholder}>Toca las fichas de abajo</ThemedText>
+          ) : null}
+        </View>
+
+        {checked ? (
+          <ThemedText variant="body" style={[styles.result, correct ? styles.ok : styles.bad]}>
+            {correct ? "✓ Correcto" : `✗ Respuesta: ${word.nasaYuwe}`}
+          </ThemedText>
+        ) : null}
+
+        <View style={styles.tilesRow}>
+          {tiles.map((t) => (
+            <TouchableOpacity key={t.id} style={styles.tile} onPress={() => handleTileTap(t)} activeOpacity={0.85}>
+              <ThemedText variant="heading" style={styles.tileText}>{t.text}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {!checked ? (
+          <Button title="Comprobar" onPress={handleCheck} disabled={placed.length === 0} style={styles.fullBtn} />
+        ) : (
+          <Button title="Siguiente" onPress={handleNext} style={styles.fullBtn} />
+        )}
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.background, padding: 16 },
-  content: { gap: 8 },
-  progress: { color: theme.muted, textAlign: "center", marginBottom: 8 },
-  prompt: { fontSize: 16, color: theme.muted, textAlign: "center" },
-  word: { fontSize: 24, fontWeight: "bold", textAlign: "center", color: theme.primary, marginBottom: 12 },
-  placedRow: { flexDirection: "row", flexWrap: "wrap", minHeight: 48, padding: 8, backgroundColor: theme.card, borderRadius: theme.radius, borderWidth: 1, borderColor: theme.border, marginBottom: 8, gap: 4 },
-  placedTile: { backgroundColor: theme.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
-  tilesRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 },
-  tile: { backgroundColor: theme.card, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: theme.border },
-  tileText: { fontSize: 16, fontWeight: "600", color: theme.primary },
-  placeholder: { color: theme.muted, fontSize: 14 },
-  btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 8 },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  result: { fontSize: 16, textAlign: "center", marginTop: 8 },
+  content: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  muted: { color: theme.muted },
+  progress: { textAlign: "center", color: theme.muted },
+  prompt: { textAlign: "center", color: theme.muted },
+  word: { textAlign: "center", color: theme.primary },
+  placedRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    minHeight: 64,
+    padding: spacing.md,
+    backgroundColor: theme.card,
+    borderRadius: radiusScale.md,
+    borderWidth: 1,
+    borderColor: theme.border,
+    gap: spacing.sm,
+    boxShadow: shadows.card,
+    borderCurve: "continuous",
+  },
+  placedTile: {
+    backgroundColor: theme.primary,
+    borderRadius: radiusScale.sm,
+    borderCurve: "continuous",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.mid,
+    borderWidth: 1,
+    borderColor: theme.montanaDeep,
+    boxShadow: shadows.card,
+  },
+  placedTileText: { color: theme.onTint, textAlign: "center" },
+  placeholder: { color: theme.muted, textAlign: "center" },
+  tilesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  tile: {
+    backgroundColor: theme.card,
+    borderRadius: radiusScale.sm,
+    borderCurve: "continuous",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.mid,
+    borderWidth: 1,
+    borderColor: theme.border,
+    boxShadow: shadows.card,
+  },
+  tileText: { color: theme.primary, textAlign: "center" },
+  result: { textAlign: "center" },
   ok: { color: theme.success },
   bad: { color: theme.danger },
-  link: { padding: 12, alignItems: "center" },
-  linkText: { color: theme.primary, fontSize: 15 },
-  score: { fontSize: 24, textAlign: "center", marginVertical: 16 },
-  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", color: theme.primary, marginBottom: 8 },
-  muted: { color: theme.muted, textAlign: "center", marginTop: 32 },
+  fullBtn: { alignSelf: "stretch" },
+  doneContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  doneTitle: { textAlign: "center", color: theme.primary },
+  score: { textAlign: "center", color: theme.text },
+  link: { padding: spacing.md, alignItems: "center" },
+  linkText: { color: theme.primary },
 });
