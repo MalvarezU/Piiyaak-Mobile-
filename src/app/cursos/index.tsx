@@ -278,17 +278,20 @@ export default function Cursos() {
     };
   }, [courses, courseStore]);
 
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   const handleSync = async () => {
     if (!courseStore) return;
     setSyncing(true);
+    setSyncError(null);
     try {
       await syncCourses(courseStore, session);
       if (store && session) {
         await flushCourseProgress(courseStore, store, session);
       }
       await loadCourses();
-    } catch (e) {
-      console.error("sync courses error", e);
+    } catch {
+      setSyncError("No se pudo sincronizar. Revisá la conexión e intentá de nuevo.");
     } finally {
       setSyncing(false);
     }
@@ -425,6 +428,11 @@ export default function Cursos() {
                 onPress={handleSync}
                 style={styles.syncBtn}
               />
+              {syncError ? (
+                <ThemedText variant="caption" style={styles.syncError}>
+                  {syncError}
+                </ThemedText>
+              ) : null}
             </View>
           </View>
         }
@@ -598,6 +606,11 @@ const styles = StyleSheet.create({
   },
   syncBtn: {
     width: "100%",
+  },
+  syncError: {
+    color: theme.danger,
+    marginTop: spacing.xs,
+    textAlign: "center",
   },
   card: {
     padding: 0,
