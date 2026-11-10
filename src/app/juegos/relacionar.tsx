@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import { Text, View, StyleSheet, ScrollView } from "react-native";
+import { useEffect, useState, useRef } from "react";
+import { View, StyleSheet, ScrollView } from "react-native";
 import { useDb } from "../../db-context";
-import { theme, fonts, spacing, type, minHit } from "../../theme";
+import { theme, fonts, spacing, minHit } from "../../theme";
 import { Screen, ThemedText, Card, Button, Chip } from "../../components/ui";
 import type { WordRow } from "../../db/types";
-import { RefreshCw, CheckCircle2 } from "lucide-react-native";
+import { RefreshCw, CheckCircle2, Link2 } from "lucide-react-native";
 
 function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -17,77 +17,105 @@ function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
-interface GameCard {
+interface Pair {
   id: string;
-  text: string;
-  pairId: string;
-  side: "es" | "ny";
+  spanish: string;
+  nasaYuwe: string;
 }
 
 export default function Relacionar() {
   const { store } = useDb();
-  const [cards, setCards] = useState<GameCard[]>([]);
-  const [flipped, setFlipped] = useState<number[]>([]);
+  const [pairs, setPairs] = useState<Pair[]>([]);
+  const [rightOrder, setRightOrder] = useState<string[]>([]);
   const [matched, setMatched] = useState<Set<string>>(new Set());
+  const [selLeft, setSelLeft] = useState<string | null>(null);
+  const [selRight, setSelRight] = useState<string | null>(null);
+  const [miss, setMiss] = useState<{ left: string; right: string } | null>(null);
   const [moves, setMoves] = useState(0);
   const [done, setDone] = useState(false);
+  const missTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = async () => {
+    if (!store) return;
+    const words = await store.listAZ(null, 6, 0);
+    if (words.length < 4) return;
+    const pool = shuffle(words as WordRow[]).slice(0, 6);
+    const ps: Pair[] = pool.map((w) => ({
+      id: w.id,
+      spanish: w.spanish,
+      nasaYuwe: w.nasaYuwe,
+    }));
+    setPairs(ps);
+    setRightOrder(shuffle(ps.map((p) => p.id)));
+    setMatched(new Set());
+    setSelLeft(null);
+    setSelRight(null);
+    setMiss(null);
+    setMoves(0);
+    setDone(false);
+  };
 
   useEffect(() => {
     let alive = true;
     (async () => {
       if (!store) return;
-      const words = await store.listAZ(null, 6, 0);
-      if (!alive || words.length < 4) return;
-      const pool = shuffle(words as WordRow[]).slice(0, 6);
-      const cs: GameCard[] = [];
-      for (const w of pool) {
-        cs.push({ id: `es-${w.id}`, text: w.spanish, pairId: w.id, side: "es" });
-        cs.push({ id: `ny-${w.id}`, text: w.nasaYuwe, pairId: w.id, side: "ny" });
-      }
-      if (alive) setCards(shuffle(cs));
+      await load();
+      if (!alive) return;
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
-  const handleFlip = (idx: number) => {
-    if (flipped.length >= 2) return;
-    if (flipped.includes(idx)) return;
-    const card = cards[idx];
-    if (!card || matched.has(card.pairId)) return;
-    const next = [...flipped, idx];
-    setFlipped(next);
-    if (next.length === 2) {
-      setMoves((m) => m + 1);
-      const a = cards[next[0]!];
-      const b = cards[next[1]!];
-      if (a && b && a.pairId === b.pairId && a.side !== b.side) {
-        setMatched((prev) => new Set(prev).add(a.pairId));
-        setFlipped([]);
-        if (matched.size + 1 >= cards.length / 2) setDone(true);
-      } else {
-        setTimeout(() => setFlipped([]), 800);
-      }
+  const evaluate = (leftId: string, rightId: string) => {
+    setMoves((m) => m + 1);
+    if (leftId === rightId) {
+      setMatched((prev) => new Set(prev).add(leftId));
+      setSelLeft(null);
+      setSelRight(null);
+      setMiss(null);
+      // check done
+      setMatched((prev) => {
+        if (prev.size + 1 >= pairs.length) setDone(true);
+        return prev;
+      });
+    } else {
+      setMiss({ left: leftId, right: rightId });
+      if (missTimer.current) clearTimeout(missTimer.current);
+      missTimer.current = setTimeout(() => {
+        setMiss(null);
+        setSelLeft(null);
+        setSelRight(null);
+      }, 700);
+    }
+  };
+
+  const handleLeft = (id: string) => {
+    if (matched.has(id) || miss) return;
+    if (selRight !== null) {
+      setSelLeft(id);
+      evaluate(id, selRight);
+    } else {
+      setSelLeft(id);
+    }
+  };
+
+  const handleRight = (id: string) => {
+    if (matched.has(id) || miss) return;
+    if (selLeft !== null) {
+      setSelRight(id);
+      evaluate(selLeft, id);
+    } else {
+      setSelRight(id);
     }
   };
 
   const reset = async () => {
-    if (!store) return;
-    const words = await store.listAZ(null, 6, 0);
-    if (words.length < 4) return;
-    const pool = shuffle(words as WordRow[]).slice(0, 6);
-    const cs: GameCard[] = [];
-    for (const w of pool) {
-      cs.push({ id: `es-${w.id}`, text: w.spanish, pairId: w.id, side: "es" });
-      cs.push({ id: `ny-${w.id}`, text: w.nasaYuwe, pairId: w.id, side: "ny" });
-    }
-    setCards(shuffle(cs));
-    setFlipped([]);
-    setMatched(new Set());
-    setMoves(0);
-    setDone(false);
+    await load();
   };
 
-  if (!store || cards.length === 0) {
+  if (!store || pairs.length === 0) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -98,6 +126,8 @@ export default function Relacionar() {
       </Screen>
     );
   }
+
+  const pairById = new Map(pairs.map((p) => [p.id, p]));
 
   return (
     <Screen>
@@ -119,38 +149,79 @@ export default function Relacionar() {
           ) : null}
         </View>
 
-        <View style={styles.grid}>
-          {cards.map((card, idx) => {
-            const isFlipped = flipped.includes(idx) || matched.has(card.pairId);
-            const isMatched = matched.has(card.pairId);
-            return (
-              <Card
-                key={card.id}
-                onPress={isFlipped ? undefined : () => handleFlip(idx)}
-                style={[
-                  styles.card,
-                  isFlipped
-                    ? isMatched
-                      ? styles.cardMatched
-                      : styles.cardFaceUp
-                    : styles.cardFaceDown,
-                ]}
-              >
-                {isFlipped ? (
-                  <Text
+        <View style={styles.columns}>
+          <View style={styles.column}>
+            <ThemedText variant="caption" style={styles.colHeader}>
+              Español
+            </ThemedText>
+            {pairs.map((p) => {
+              const isMatched = matched.has(p.id);
+              const isSelected = selLeft === p.id;
+              const isMiss = miss?.left === p.id;
+              return (
+                <Card
+                  key={`es-${p.id}`}
+                  onPress={isMatched ? undefined : () => handleLeft(p.id)}
+                  style={[
+                    styles.tile,
+                    isMatched && styles.tileMatched,
+                    isSelected && styles.tileSelected,
+                    isMiss && styles.tileMiss,
+                  ]}
+                >
+                  <ThemedText
+                    variant="body"
                     style={[
-                      styles.cardText,
-                      card.side === "ny" ? styles.cardTextNasa : styles.cardTextEs,
+                      styles.tileText,
+                      cardSideStyle("es"),
+                      isMatched && styles.tileTextMatched,
                     ]}
                   >
-                    {card.text}
-                  </Text>
-                ) : (
-                  <Text style={styles.cardBack}>?</Text>
-                )}
-              </Card>
-            );
-          })}
+                    {p.spanish}
+                  </ThemedText>
+                </Card>
+              );
+            })}
+          </View>
+
+          <View style={styles.connectorCol}>
+            <Link2 size={20} color={theme.muted} />
+          </View>
+
+          <View style={styles.column}>
+            <ThemedText variant="caption" style={styles.colHeader}>
+              Nasa Yuwe
+            </ThemedText>
+            {rightOrder.map((id) => {
+              const p = pairById.get(id)!;
+              const isMatched = matched.has(id);
+              const isSelected = selRight === id;
+              const isMiss = miss?.right === id;
+              return (
+                <Card
+                  key={`ny-${id}`}
+                  onPress={isMatched ? undefined : () => handleRight(id)}
+                  style={[
+                    styles.tile,
+                    isMatched && styles.tileMatched,
+                    isSelected && styles.tileSelected,
+                    isMiss && styles.tileMiss,
+                  ]}
+                >
+                  <ThemedText
+                    variant="body"
+                    style={[
+                      styles.tileText,
+                      cardSideStyle("ny"),
+                      isMatched && styles.tileTextMatched,
+                    ]}
+                  >
+                    {p.nasaYuwe}
+                  </ThemedText>
+                </Card>
+              );
+            })}
+          </View>
         </View>
 
         <Button
@@ -163,6 +234,12 @@ export default function Relacionar() {
       </ScrollView>
     </Screen>
   );
+}
+
+function cardSideStyle(side: "es" | "ny") {
+  return side === "ny"
+    ? { fontFamily: fonts.serifSemibold, color: theme.primary }
+    : { fontFamily: fonts.sansSemibold, color: theme.text };
 }
 
 const styles = StyleSheet.create({
@@ -185,46 +262,48 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xs,
   },
-  grid: {
+  columns: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    gap: spacing.sm,
+    alignItems: "flex-start",
+  },
+  column: {
+    flex: 1,
     gap: spacing.sm,
   },
-  card: {
-    width: "48%",
-    aspectRatio: 1,
+  connectorCol: {
+    width: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: spacing.xl,
+  },
+  colHeader: {
+    textAlign: "center",
+    marginBottom: spacing.xs,
+    color: theme.muted,
+  },
+  tile: {
     minHeight: minHit,
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.sm,
   },
-  cardFaceDown: {
-    backgroundColor: theme.successSoft,
-  },
-  cardFaceUp: {
-    backgroundColor: theme.card,
-  },
-  cardMatched: {
+  tileMatched: {
     backgroundColor: theme.successSoft,
     borderColor: theme.success,
   },
-  cardBack: {
-    ...type.title,
-    fontFamily: fonts.serifBold,
-    color: theme.muted,
+  tileSelected: {
+    borderColor: theme.primary,
+    borderWidth: 2,
   },
-  cardText: {
+  tileMiss: {
+    borderColor: theme.danger ?? theme.muted,
+  },
+  tileText: {
     textAlign: "center",
   },
-  cardTextEs: {
-    ...type.body,
-    fontFamily: fonts.serif,
-    color: theme.text,
-  },
-  cardTextNasa: {
-    ...type.body,
-    fontFamily: fonts.serifSemibold,
-    color: theme.primary,
+  tileTextMatched: {
+    color: theme.success,
   },
   resetBtn: {
     alignSelf: "stretch",
