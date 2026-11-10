@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from "react";
+import { ScrollView, View, StyleSheet, Image } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useDb } from "../../../db-context";
+import { useAuth } from "../../../auth";
+import { apiFetch } from "../../../api";
+import { theme, spacing, radiusScale } from "../../../theme";
+import { resolveCachedUri } from "../../../db/media-fs";
+import type { LessonRow } from "../../../db/course-types";
 import { createAudioPlayer, type AudioPlayer } from "../../../audio-player";
 import { QuizBlock } from "../../../components/quiz-block";
 import { RichTextBlock } from "../../../components/rich-text-block";
+import { Screen, ThemedText, Card, Button } from "../../../components/ui";
+import { Volume2, Play, BookOpen, CheckCircle2 } from "lucide-react-native";
 
 function ListeningPlayer({ url }: { url: string }) {
   const [playing, setPlaying] = useState(false);
@@ -39,27 +49,15 @@ function ListeningPlayer({ url }: { url: string }) {
   }, []);
 
   return (
-    <TouchableOpacity style={styles.audioBtn} onPress={toggle}>
-      <Text style={styles.audioBtnText}>{playing ? "⏸ Pausar audio" : "▶ Reproducir audio"}</Text>
-    </TouchableOpacity>
+    <Button
+      title={playing ? "Pausar audio" : "Reproducir audio"}
+      variant="secondary"
+      icon={<Volume2 size={18} color={theme.primary} />}
+      onPress={toggle}
+    />
   );
 }
-import { ScrollView, Text, TouchableOpacity, View, StyleSheet, Image } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useDb } from "../../../db-context";
-import { useAuth } from "../../../auth";
-import { apiFetch } from "../../../api";
-import { theme } from "../../../theme";
-import { resolveCachedUri } from "../../../db/media-fs";
-import type { LessonRow } from "../../../db/course-types";
-import type { CourseProgressRow } from "../../../db/course-types";
 
-/**
- * Bloques de medios con resolución contra el media-cache (B3-03, spec §3.1):
- * `image` y `audio`/`listening` usan la clave `lesson:<id>`; sin pasado
- * heredado, por lo que resuelven contenido → remoto. Video/youtubeId quedan
- * excluidos (spec §3.2) y conservan el comportamiento actual.
- */
 function CachedLessonImage({
   lessonId,
   url,
@@ -90,18 +88,16 @@ function CachedLessonImage({
   return (
     <View>
       <Image source={{ uri: src }} style={styles.imageBlock} resizeMode="cover" />
-      {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+      {caption ? (
+        <ThemedText variant="caption" style={styles.caption}>
+          {caption}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
 
-function CachedLessonAudio({
-  lessonId,
-  url,
-}: {
-  lessonId: string;
-  url: string;
-}) {
+function CachedLessonAudio({ lessonId, url }: { lessonId: string; url: string }) {
   const [resolved, setResolved] = useState(url);
   useEffect(() => {
     let alive = true;
@@ -151,7 +147,7 @@ export default function Leccion() {
       // Fetch words for word/vocabulary blocks
       if (alive && l) {
         try {
-          const content = JSON.parse(l.content) as { blocks?: Array<{ type: string; wordId?: string; wordIds?: string[] }> };
+          const content = JSON.parse(l.content) as { blocks?: { type: string; wordId?: string; wordIds?: string[] }[] };
           const ids = new Set<string>();
           for (const b of content.blocks ?? []) {
             if (b.type === "word" && b.wordId) ids.add(b.wordId);
@@ -168,11 +164,21 @@ export default function Leccion() {
         }
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [store, courseStore, id]);
 
   if (!lesson) {
-    return <View style={styles.root}><Text style={styles.muted}>Cargando lección...</Text></View>;
+    return (
+      <Screen>
+        <View style={styles.loading}>
+          <ThemedText variant="body" style={styles.muted}>
+            Cargando lección...
+          </ThemedText>
+        </View>
+      </Screen>
+    );
   }
 
   let content: { version: number; blocks: Block[] } = { version: 2, blocks: [] };
@@ -183,119 +189,154 @@ export default function Leccion() {
   }
 
   return (
-    <ScrollView style={styles.root}>
-      <Text style={styles.title}>{lesson.title}</Text>
-      {content.blocks.map((block) => (
-        <View key={block.id} style={styles.block}>
-          {renderBlock(block, wordMap, String(id))}
+    <Screen>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <ThemedText variant="title" style={styles.title}>
+            {lesson.title}
+          </ThemedText>
         </View>
-      ))}
-      <TouchableOpacity
-        style={[styles.btn, completed ? styles.btnDone : null]}
-        onPress={async () => {
-          if (!courseStore || !id) return;
-          const next = !completed;
-          setCompleted(next);
-          await courseStore.setProgress(String(id), next, next ? 100 : null);
-          if (session) {
-            apiFetch("/api/progress", { method: "POST", body: JSON.stringify({ lessonId: id, completed: next }) }, session).catch(() => {
-              // queue for later sync
+        {content.blocks.map((block) => (
+          <Card key={block.id} style={styles.blockCard}>
+            {renderBlock(block, wordMap, String(id))}
+          </Card>
+        ))}
+        <Button
+          title={completed ? "Completada" : "Marcar como completada"}
+          variant="primary"
+          icon={<CheckCircle2 size={18} color={theme.onTint} />}
+          onPress={async () => {
+            if (!courseStore || !id) return;
+            const next = !completed;
+            setCompleted(next);
+            await courseStore.setProgress(String(id), next, next ? 100 : null);
+            if (session) {
+              apiFetch("/api/progress", { method: "POST", body: JSON.stringify({ lessonId: id, completed: next }) }, session).catch(() => {
+                // queue for later sync
+                store?.addOutbox("course_progress", "progress.set", JSON.stringify({ lessonId: id, completed: next })).catch(() => {});
+              });
+            } else {
               store?.addOutbox("course_progress", "progress.set", JSON.stringify({ lessonId: id, completed: next })).catch(() => {});
-            });
-          } else {
-            store?.addOutbox("course_progress", "progress.set", JSON.stringify({ lessonId: id, completed: next })).catch(() => {});
-          }
-        }}
-      >
-        <Text style={styles.btnText}>{completed ? "✓ Completada" : "Marcar como completada"}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.btn} onPress={() => router.back()}>
-        <Text style={styles.btnText}>Volver</Text>
-      </TouchableOpacity>
-    </ScrollView>
+            }
+          }}
+          style={completed ? { backgroundColor: theme.success } : undefined}
+        />
+        <Button title="Volver" variant="ghost" onPress={() => router.back()} />
+      </ScrollView>
+    </Screen>
   );
 }
 
-function renderBlock(block: Block, wordMap: Record<string, { spanish: string; nasaYuwe: string }>, lessonId: string) {
+function renderBlock(
+  block: Block,
+  wordMap: Record<string, { spanish: string; nasaYuwe: string }>,
+  lessonId: string
+) {
   switch (block.type) {
     case "text":
       return <RichTextBlock html={String(block.html ?? "")} />;
     case "image":
       return block.url ? (
-        <CachedLessonImage
-          lessonId={lessonId}
-          url={String(block.url)}
-          caption={block.caption ? String(block.caption) : undefined}
-        />
+        <CachedLessonImage lessonId={lessonId} url={String(block.url)} caption={block.caption ? String(block.caption) : undefined} />
       ) : null;
     case "audio": {
       const mediaUrl = (block.media as { url?: string })?.url;
-      return mediaUrl ? (
-        <CachedLessonAudio lessonId={lessonId} url={String(mediaUrl)} />
-      ) : null;
+      return mediaUrl ? <CachedLessonAudio lessonId={lessonId} url={String(mediaUrl)} /> : null;
     }
     case "video":
-      return <Text style={styles.videoBlock}>🎬 Video: {String(block.title ?? "")}</Text>;
+      return (
+        <View style={styles.row}>
+          <Play size={18} color={theme.primary} />
+          <ThemedText variant="body" style={styles.videoBlock}>
+            {String(block.title ?? "")}
+          </ThemedText>
+        </View>
+      );
     case "word": {
       const w = wordMap[String(block.wordId)];
-      return <Text style={styles.wordBlock}>📖 {w ? `${w.spanish} → ${w.nasaYuwe}` : String(block.wordId)}</Text>;
+      return (
+        <View style={styles.row}>
+          <BookOpen size={18} color={theme.montana} />
+          <ThemedText variant="body" style={styles.wordBlock}>
+            {w ? `${w.spanish} → ${w.nasaYuwe}` : String(block.wordId)}
+          </ThemedText>
+        </View>
+      );
     }
     case "vocabulary": {
       const ids = (block.wordIds as string[]) ?? [];
       return (
-        <View>
-          <Text style={styles.vocabBlock}>📚 Vocabulario ({ids.length}):</Text>
+        <View style={styles.vocabWrap}>
+          <View style={styles.row}>
+            <BookOpen size={18} color={theme.montana} />
+            <ThemedText variant="body" style={styles.vocabBlock}>
+              Vocabulario ({ids.length}):
+            </ThemedText>
+          </View>
           {ids.map((wid) => {
             const w = wordMap[wid];
-            return <Text key={wid} style={styles.vocabItem}>{w ? `${w.spanish} → ${w.nasaYuwe}` : wid}</Text>;
+            return (
+              <ThemedText key={wid} variant="label" style={styles.vocabItem}>
+                {w ? `${w.spanish} → ${w.nasaYuwe}` : wid}
+              </ThemedText>
+            );
           })}
         </View>
       );
     }
     case "quiz": {
-      const questions = (block.questions as Array<{ prompt: string; options: Array<{ text: string; correct: boolean }>; explanation?: string }>) ?? [];
+      const questions = (block.questions as { prompt: string; options: { text: string; correct: boolean }[]; explanation?: string }[]) ?? [];
       const passScore = typeof block.passScore === "number" ? block.passScore : 70;
       return <QuizBlock questions={questions} passScore={passScore} />;
     }
     case "listening": {
-      const opts = (block.options as Array<{ text: string; correct: boolean }>) ?? [];
+      const opts = (block.options as { text: string; correct: boolean }[]) ?? [];
       const mediaUrl = (block.media as { url?: string })?.url;
       return (
-        <View>
+        <View style={styles.listenWrap}>
           {mediaUrl ? <CachedLessonAudio lessonId={lessonId} url={String(mediaUrl)} /> : null}
-          <Text style={styles.listenQ}>{String(block.question ?? "")}</Text>
+          <ThemedText variant="bodyStrong" style={styles.listenQ}>
+            {String(block.question ?? "")}
+          </ThemedText>
           {opts.map((o, j) => (
-            <Text key={j} style={styles.quizOption}>• {o.text}</Text>
+            <ThemedText key={j} variant="label" style={styles.quizOption}>
+              • {o.text}
+            </ThemedText>
           ))}
         </View>
       );
     }
     default:
-      return <Text style={styles.muted}>Bloque: {block.type}</Text>;
+      return (
+        <ThemedText variant="caption" style={styles.muted}>
+          Bloque: {block.type}
+        </ThemedText>
+      );
   }
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.background, padding: 16 },
-  title: { fontSize: 22, fontWeight: "bold", color: theme.primary, marginBottom: 12 },
-  block: { marginBottom: 16, padding: 12, backgroundColor: theme.card, borderRadius: theme.radius, borderWidth: 1, borderColor: theme.border },
-  textBlock: { fontSize: 15, lineHeight: 22 },
-  imageBlock: { width: "100%", height: 200, borderRadius: theme.radius },
-  caption: { fontSize: 12, color: theme.muted, marginTop: 4, textAlign: "center" },
-  audioBlock: { fontSize: 15, color: theme.primary },
-  audioBtn: { backgroundColor: theme.card, borderRadius: theme.radius, padding: 12, alignItems: "center", borderWidth: 1, borderColor: theme.border, marginBottom: 8 },
-  audioBtnText: { fontSize: 15, fontWeight: "600", color: theme.primary },
-  videoBlock: { fontSize: 15, color: theme.primary },
-  wordBlock: { fontSize: 15 },
-  vocabBlock: { fontSize: 15 },
-  vocabItem: { fontSize: 14, marginLeft: 8, color: theme.muted },
-  quizTitle: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  quizQ: { marginBottom: 12 },
-  quizPrompt: { fontSize: 15, fontWeight: "600", marginBottom: 4 },
-  quizOption: { fontSize: 14, marginLeft: 8, color: theme.muted },
-  listenQ: { fontSize: 15, fontWeight: "600", marginBottom: 8 },
-  muted: { color: theme.muted, textAlign: "center", marginTop: 32 },
-  btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 16 },
-  btnDone: { backgroundColor: theme.success },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  scroll: { flex: 1 },
+  content: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  loading: { flex: 1, justifyContent: "center", alignItems: "center" },
+  muted: { color: theme.muted, textAlign: "center", marginTop: spacing.xl },
+  header: { gap: spacing.xs },
+  title: { color: theme.text },
+  blockCard: { gap: spacing.sm },
+  imageBlock: { width: "100%", height: 200, borderRadius: radiusScale.md, borderCurve: "continuous" },
+  caption: { color: theme.muted, marginTop: spacing.xs, textAlign: "center" },
+  row: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  videoBlock: { color: theme.primary, flex: 1 },
+  wordBlock: { color: theme.text, flex: 1 },
+  vocabBlock: { color: theme.text, flex: 1 },
+  vocabWrap: { gap: spacing.xs },
+  vocabItem: { color: theme.muted, marginLeft: spacing.sm },
+  listenWrap: { gap: spacing.sm },
+  listenQ: { color: theme.text, marginBottom: spacing.sm },
+  quizOption: { color: theme.muted, marginLeft: spacing.sm },
 });
