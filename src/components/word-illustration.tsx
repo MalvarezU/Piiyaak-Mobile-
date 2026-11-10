@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Image, Text, View, StyleSheet } from "react-native";
+import { theme } from "../theme";
 
 export interface WordIllustrationProps {
   url?: string | null;
@@ -38,9 +39,9 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e7e5e4",
+    borderColor: theme.border,
     overflow: "hidden",
-    backgroundColor: "#fafaf9",
+    backgroundColor: theme.background,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -49,7 +50,7 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   fallback: {
-    color: "#78716c",
+    color: theme.muted,
     fontSize: 14,
   },
 });

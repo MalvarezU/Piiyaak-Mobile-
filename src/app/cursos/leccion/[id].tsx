@@ -296,6 +296,6 @@ const styles = StyleSheet.create({
   listenQ: { fontSize: 15, fontWeight: "600", marginBottom: 8 },
   muted: { color: theme.muted, textAlign: "center", marginTop: 32 },
   btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 16 },
-  btnDone: { backgroundColor: "#16a34a" },
+  btnDone: { backgroundColor: theme.success },
   btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
 });

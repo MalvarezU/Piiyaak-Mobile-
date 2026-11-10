@@ -102,8 +102,8 @@ export default function Flashcards() {
         const isSelected = idx === selected;
         let bg = theme.card as string;
         if (selected !== null) {
-          if (isCorrect) bg = "#dcfce7";
-          else if (isSelected) bg = "#fee2e2";
+          if (isCorrect) bg = theme.successSoft;
+          else if (isSelected) bg = theme.dangerSoft;
         }
         return (
           <TouchableOpacity

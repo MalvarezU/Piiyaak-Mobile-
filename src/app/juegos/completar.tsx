@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 8 },
   btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   result: { fontSize: 16, textAlign: "center", marginTop: 8 },
-  ok: { color: "#16a34a" },
+  ok: { color: theme.success },
   bad: { color: theme.danger },
   link: { padding: 12, alignItems: "center" },
   linkText: { color: theme.primary, fontSize: 15 },

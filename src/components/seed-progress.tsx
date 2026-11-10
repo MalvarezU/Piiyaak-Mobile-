@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
   },
-  btnText: { color: "#ffffff", fontWeight: "600", fontSize: 16 },
+  btnText: { color: theme.onTint, fontWeight: "600", fontSize: 16 },
   btnGhost: {
     borderRadius: theme.radius,
     paddingHorizontal: 16,

@@ -43,8 +43,8 @@ export function QuizBlock({ questions, passScore }: QuizBlockProps) {
             const showResult = submitted;
             let bg = theme.card as string;
             if (showResult) {
-              if (opt.correct) bg = "#dcfce7";
-              else if (selected) bg = "#fee2e2";
+              if (opt.correct) bg = theme.successSoft;
+              else if (selected) bg = theme.dangerSoft;
             } else if (selected) {
               bg = theme.primary + "20";
             }
@@ -91,13 +91,13 @@ export function QuizBlock({ questions, passScore }: QuizBlockProps) {
 const styles = StyleSheet.create({
   question: { marginBottom: 16 },
   prompt: { fontSize: 15, fontWeight: "600", marginBottom: 8 },
-  option: { padding: 12, borderRadius: 8, borderWidth: 1, borderColor: "#e7e5e4", marginBottom: 6 },
+  option: { padding: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, marginBottom: 6 },
   optionText: { fontSize: 14 },
   btn: { backgroundColor: theme.primary, borderRadius: 8, padding: 12, alignItems: "center", marginTop: 8 },
   btnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
   result: { marginTop: 12, alignItems: "center" },
   resultText: { fontSize: 16, fontWeight: "600" },
-  ok: { color: "#16a34a" },
-  bad: { color: "#dc2626" },
+  ok: { color: theme.success },
+  bad: { color: theme.danger },
   explanation: { fontSize: 13, color: theme.muted, marginTop: 4, fontStyle: "italic" },
 });

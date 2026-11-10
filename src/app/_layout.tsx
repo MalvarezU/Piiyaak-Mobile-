@@ -1,16 +1,50 @@
 import { Tabs } from "expo-router";
+import { useFonts } from "expo-font";
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+} from "@expo-google-fonts/inter";
+import {
+  SourceSerif4_400Regular,
+  SourceSerif4_600SemiBold,
+  SourceSerif4_700Bold,
+} from "@expo-google-fonts/source-serif-4";
+import { theme, fonts } from "../theme";
 import { AuthProvider } from "../auth";
 import { DbProvider } from "../db-context";
 
+/** Fuentes offline desde instalación (al binario del APK, sin red). */
+const FONT_MAP = {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  SourceSerif4_400Regular,
+  SourceSerif4_600SemiBold,
+  SourceSerif4_700Bold,
+};
+
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts(FONT_MAP);
+  if (!fontsLoaded) {
+    // Carga en milisegundos desde el APK: sin fuente = sin render.
+    return null;
+  }
+
   return (
     <AuthProvider>
       <DbProvider>
         <Tabs
           screenOptions={{
-            headerStyle: { backgroundColor: "#7c2d12" },
-            headerTintColor: "#fff",
-            tabBarActiveTintColor: "#7c2d12",
+            headerStyle: { backgroundColor: theme.montana },
+            headerTintColor: theme.onTint,
+            headerTitleStyle: { fontFamily: fonts.sansSemibold },
+            tabBarActiveTintColor: theme.montana,
+            tabBarInactiveTintColor: theme.muted,
+            tabBarStyle: {
+              backgroundColor: theme.card,
+              borderTopColor: theme.border,
+            },
           }}
         >
           <Tabs.Screen name="index" options={{ title: "Buscar" }} />

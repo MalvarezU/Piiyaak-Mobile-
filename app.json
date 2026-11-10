@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#faf7f0"
+      "backgroundColor": "#f5f0e6"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -22,7 +22,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#faf7f0"
+        "backgroundColor": "#f5f0e6"
       },
       "package": "com.piiyaak.app"
     },
@@ -31,7 +31,8 @@
       "react-native-zip-archive",
       "expo-asset",
       "expo-secure-store",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
