@@ -87,6 +87,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const [historyWords, setHistoryWords] = useState<WordRow[]>([]);
   const [pendingOutboxCount, setPendingOutboxCount] = useState(0);
   const storeRef = useRef<WordStore | null>(null);
+  const courseStoreRef = useRef<CourseStore | null>(null);
   const dbRef = useRef<SQLiteDatabase | null>(null);
   // W3 — estado del seed ("Preparando contenido"). La apertura instantánea
   // existente queda intacta como fallback; el chequeo del seed corre en
@@ -119,6 +120,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     const s = await SQLiteWordStore.open(db);
     const cs = await SQLiteCourseStore.open(db);
     storeRef.current = s;
+    courseStoreRef.current = cs;
     setStore(s);
     setCourseStore(cs);
     setLastSync(await s.getLastSync());
@@ -418,6 +420,17 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       const current = storeRef.current ?? store;
       try {
         await refreshMediaAfterSync(current, defaultMediaCache(), { favorites });
+      } catch {
+        // best-effort: el diccionario ya sincronizó
+      }
+      // Los cursos también se sincronizan con el sync global (Ajustes):
+      // best-effort, nunca rompe el sync del diccionario.
+      try {
+        const cs = courseStoreRef.current;
+        if (cs) {
+          const { syncCourses } = await import("./db/sync-courses");
+          await syncCourses(cs, session);
+        }
       } catch {
         // best-effort: el diccionario ya sincronizó
       }

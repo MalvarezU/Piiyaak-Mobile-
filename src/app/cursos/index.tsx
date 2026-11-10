@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Image, Pressable, TextInput, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { GraduationCap, RefreshCw, ArrowRight, Search, X } from "lucide-react-native";
@@ -212,6 +212,30 @@ export default function Cursos() {
   useEffect(() => {
     loadCourses();
   }, [loadCourses]);
+
+  // Auto-sync al entrar a la pestaña: los cursos se cargan solos sin
+  // depender del botón. Corre una sola vez por montaje (ref anti-doble).
+  const autoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!courseStore || autoSyncedRef.current) return;
+    autoSyncedRef.current = true;
+    (async () => {
+      setSyncing(true);
+      setSyncError(null);
+      try {
+        await syncCourses(courseStore, session);
+        if (store && session) {
+          await flushCourseProgress(courseStore, store, session);
+        }
+        await loadCourses();
+      } catch {
+        setSyncError("No se pudo sincronizar. Revisá la conexión e intentá de nuevo.");
+      } finally {
+        setSyncing(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseStore]);
 
   // Banda de continuación: el curso con mayor avance (>0). La próxima lección
   // es la primera no completada recorriendo módulos→lecciones en orden.
