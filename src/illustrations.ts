@@ -1,6 +1,38 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { Asset } from "expo-asset";
 import { defaultMediaCache } from "./db/media-fs";
 import type { MediaRef } from "./db/media-cache";
+
+// Mapa estático de ilustraciones bundled (mismo patrón que el audio en
+// juegos/escucha): la DB almacena la ruta relativa ("illustrations/X.png")
+// y aquí se resuelve a la URI local del asset embebido en el APK.
+// Se popula de forma lazy para no romper vitest (ESM no soporta require()).
+const BUNDLED_ILLUSTRATIONS: Record<string, number> = {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_ILLUSTRATIONS["illustrations/TUPA.png"] = require("../assets/illustrations/TUPA.png");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_ILLUSTRATIONS["illustrations/TXITE.png"] = require("../assets/illustrations/TXITE.png");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_ILLUSTRATIONS["illustrations/YAT.png"] = require("../assets/illustrations/YAT.png");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_ILLUSTRATIONS["illustrations/A_TE.png"] = require("../assets/illustrations/A_TE.png");
+} catch {
+  // Entorno de test (vitest/ESM): require() no disponible; el mapa queda vacío
+  // y resolveIllustrationUri cae al flujo normal (cache/legacy/remoto).
+}
+
+async function resolveBundledIllustrationUri(url: string): Promise<string | null> {
+  const mod = BUNDLED_ILLUSTRATIONS[url];
+  if (mod === undefined) return null;
+  try {
+    const asset = Asset.fromModule(mod);
+    await asset.downloadAsync();
+    return asset.uri ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Ilustraciones offline como adaptador delgado sobre `MediaCache` (B3-03).
@@ -134,6 +166,10 @@ export async function resolveIllustrationUri(
     migrateInBackground(legacy, cache.localUriFor(ref));
     return legacy;
   }
+  // Ilustraciones bundled en el APK (assets/illustrations/): se resuelven
+  // a la URI local del asset sin red.
+  const bundled = await resolveBundledIllustrationUri(word.illustrationUrl);
+  if (bundled) return bundled;
   return word.illustrationUrl;
 }
 
