@@ -15,6 +15,7 @@ import { useDb } from "../db-context";
 import { EmptyState } from "../components/empty-state";
 import { theme, fonts, spacing, radiusScale, type } from "../theme";
 import { Screen, ThemedText, Card, Chip } from "../components/ui";
+import { Reveal } from "../components/motion";
 import type { WordRow } from "../db/types";
 
 /**
@@ -122,12 +123,14 @@ export default function Explorar() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <ThemedText variant="title">Índice Alfabético</ThemedText>
-        <ThemedText variant="body" style={styles.subtitle}>
-          De la A a la Z
-        </ThemedText>
-      </View>
+      <Reveal delay={0}>
+        <View style={styles.header}>
+          <ThemedText variant="title">Índice Alfabético</ThemedText>
+          <ThemedText variant="body" style={styles.subtitle}>
+            De la A a la Z
+          </ThemedText>
+        </View>
+      </Reveal>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}

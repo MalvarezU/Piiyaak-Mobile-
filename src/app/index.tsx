@@ -13,6 +13,7 @@ import { useDb } from "../db-context";
 import { useAuth } from "../auth";
 import { EmptyState } from "../components/empty-state";
 import { SeedProgress } from "../components/seed-progress";
+import { Reveal } from "../components/motion";
 import { UpdateNotice } from "../components/update-notice";
 import type { WordRow } from "../db/types";
 import { loadWordOfDay } from "../db/word-of-day";
@@ -80,18 +81,20 @@ export default function Inicio() {
     <Screen>
       <View style={styles.content}>
         {wod ? (
-          <Card onPress={() => router.push({ pathname: "/ficha/[id]", params: { id: wod.id } })}>
-            <View style={styles.wodBody}>
-              <ThemedText variant="caption" style={styles.wodLabel}>
-                Palabra del día
-              </ThemedText>
-              <ThemedText variant="word">{wod.nasaYuwe}</ThemedText>
-              <ThemedText variant="body" style={styles.wodSpanish}>
-                {wod.spanish}
-              </ThemedText>
-              {wod.category ? <Chip label={wod.category} tone="accent" /> : null}
-            </View>
-          </Card>
+          <Reveal delay={0}>
+            <Card onPress={() => router.push({ pathname: "/ficha/[id]", params: { id: wod.id } })}>
+              <View style={styles.wodBody}>
+                <ThemedText variant="caption" style={styles.wodLabel}>
+                  Palabra del día
+                </ThemedText>
+                <ThemedText variant="word">{wod.nasaYuwe}</ThemedText>
+                <ThemedText variant="body" style={styles.wodSpanish}>
+                  {wod.spanish}
+                </ThemedText>
+                {wod.category ? <Chip label={wod.category} tone="accent" /> : null}
+              </View>
+            </Card>
+          </Reveal>
         ) : null}
         {updateAvailable ? (
           <UpdateNotice
@@ -109,14 +112,16 @@ export default function Inicio() {
             Preparando diccionario offline...
           </ThemedText>
         ) : null}
-        <View style={styles.tiles}>
-          {MODULES.map((modulo) => (
-            <Card key={modulo.href} onPress={() => router.push(modulo.href)} style={styles.tile}>
-              <modulo.icon size={24} color={theme.primary} />
-              <ThemedText variant="label">{modulo.title}</ThemedText>
-            </Card>
-          ))}
-        </View>
+        <Reveal delay={80}>
+          <View style={styles.tiles}>
+            {MODULES.map((modulo) => (
+              <Card key={modulo.href} onPress={() => router.push(modulo.href)} style={styles.tile}>
+                <modulo.icon size={24} color={theme.primary} />
+                <ThemedText variant="label">{modulo.title}</ThemedText>
+              </Card>
+            ))}
+          </View>
+        </Reveal>
         <View style={styles.search}>
           <Search size={20} color={theme.muted} />
           <TextInput

@@ -65,7 +65,7 @@ export default function JuegosHub() {
             const locked = g.id === "escucha" ? audioCount < 8 : false;
             if (locked) {
               return (
-                <Card key={g.id}>
+                <Card key={g.id} accessibilityRole="button" accessibilityLabel={g.title}>
                   <View style={styles.row}>
                     <View style={[styles.iconBox, styles.iconBoxLocked]}>
                       <g.icon size={24} color={theme.muted} />
@@ -92,6 +92,8 @@ export default function JuegosHub() {
               <Card
                 key={g.id}
                 onPress={store ? () => router.push(`/juegos/${g.id}` as any) : undefined}
+                accessibilityRole="button"
+                accessibilityLabel={g.title}
               >
                 <View style={styles.row}>
                   <View style={styles.iconBox}>
