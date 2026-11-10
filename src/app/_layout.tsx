@@ -11,6 +11,7 @@ import {
   SourceSerif4_700Bold,
 } from "@expo-google-fonts/source-serif-4";
 import { theme, fonts } from "../theme";
+import { Home, ArrowDownAZ, Heart, History, Settings } from "lucide-react-native";
 import { AuthProvider } from "../auth";
 import { DbProvider } from "../db-context";
 
@@ -47,11 +48,11 @@ export default function RootLayout() {
             },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: "Inicio" }} />
-          <Tabs.Screen name="explorar" options={{ title: "A-Z" }} />
-          <Tabs.Screen name="favoritos" options={{ title: "Favoritas" }} />
-          <Tabs.Screen name="historial" options={{ title: "Historial" }} />
-          <Tabs.Screen name="ajustes" options={{ title: "Ajustes" }} />
+          <Tabs.Screen name="index" options={{ title: "Inicio", tabBarIcon: ({ color, size }) => <Home color={color} size={size} /> }} />
+          <Tabs.Screen name="explorar" options={{ title: "A-Z", tabBarIcon: ({ color, size }) => <ArrowDownAZ color={color} size={size} /> }} />
+          <Tabs.Screen name="favoritos" options={{ title: "Favoritas", tabBarIcon: ({ color, size }) => <Heart color={color} size={size} /> }} />
+          <Tabs.Screen name="historial" options={{ title: "Historial", tabBarIcon: ({ color, size }) => <History color={color} size={size} /> }} />
+          <Tabs.Screen name="ajustes" options={{ title: "Ajustes", tabBarIcon: ({ color, size }) => <Settings color={color} size={size} /> }} />
           <Tabs.Screen name="ficha/[id]" options={{ href: null, title: "Ficha" }} />
           <Tabs.Screen name="juegos/index" options={{ href: null, title: "Juegos" }} />
           <Tabs.Screen name="juegos/flashcards" options={{ href: null, title: "Flashcards" }} />

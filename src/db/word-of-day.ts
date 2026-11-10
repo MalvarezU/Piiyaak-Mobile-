@@ -22,10 +22,14 @@ export async function fetchWordOfDay(
     session
   );
   if (!res.ok) return null;
-  const body = (await res.json()) as { word?: { id?: unknown } | null };
-  const id = body.word?.id;
-  if (typeof id !== "string" || id.length === 0) return null;
-  return { wordId: id };
+  try {
+    const body = (await res.json()) as { word?: { id?: unknown } | null };
+    const id = body.word?.id;
+    if (typeof id !== "string" || id.length === 0) return null;
+    return { wordId: id };
+  } catch {
+    return null;
+  }
 }
 
 /** Vista anónima: historial local + outbox, nunca servidor. */
