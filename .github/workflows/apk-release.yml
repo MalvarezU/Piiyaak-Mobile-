@@ -34,7 +34,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: piiyaak-app
 
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +76,7 @@ jobs:
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
         run: |
           set -euo pipefail
-          latest_json="$(curl -fsSL --max-time 30 "$R2_PUBLIC_BASE_URL/apk/seed-latest.json")"
+          latest_json="$(curl -fsSL --max-time 30 "$R2_PUBLIC_BASE_URL/seed/latest.json")"
           cv="$(printf '%s' "$latest_json" | jq -r '.contentVersion // empty')"
           if [ -z "$cv" ]; then
             echo "::error::latest.json sin contentVersion"
@@ -104,10 +103,32 @@ jobs:
           # Mapa de require() regenerado desde los archivos reales
           npx tsx scripts/generate-bundled-media-map.ts
 
+      - name: Prebuild nativo + firma release
+        run: |
+          set -euo pipefail
+          EXPO_PUBLIC_API_URL=https://piiyaak.com npx expo prebuild --platform android --clean
+          node scripts/ci/apply-release-signing.js
+
+      - name: Keystore de firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            echo "keystore OK"
+          else
+            echo "::warning::sin KEYSTORE_BASE64: se firmará en debug"
+          fi
+
       - name: Compilar APK release
         env:
           EXPO_PUBLIC_API_URL: https://piiyaak.com
           EXPO_PUBLIC_SEED_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+          KEYSTORE_FILE: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           cd android

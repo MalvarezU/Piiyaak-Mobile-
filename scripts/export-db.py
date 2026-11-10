@@ -1,3 +1,4 @@
+"""DEPRECATED: usa IDs cmw6dy* que ya no existen. Ver scripts/generate-bundled-media-map.ts."""
 #!/usr/bin/env python3
 """Genera assets/piiyaak.db pre-poblada desde /api/sync/seed.
 

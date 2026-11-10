@@ -1,3 +1,4 @@
+"""DEPRECATED: usa IDs cmw6dy* que ya no existen. Ver scripts/generate-bundled-media-map.ts."""
 import sqlite3, os, shutil
 
 DB = "assets/piiyaak.db"
