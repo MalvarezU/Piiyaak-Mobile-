@@ -47,7 +47,7 @@ export default function RootLayout() {
             },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: "Buscar" }} />
+          <Tabs.Screen name="index" options={{ title: "Inicio" }} />
           <Tabs.Screen name="explorar" options={{ title: "A-Z" }} />
           <Tabs.Screen name="favoritos" options={{ title: "Favoritas" }} />
           <Tabs.Screen name="historial" options={{ title: "Historial" }} />
