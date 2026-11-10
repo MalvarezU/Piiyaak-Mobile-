@@ -6,7 +6,7 @@
  * por qué). Los emojis se reemplazan 1:1 por íconos lucide.
  */
 import { ScrollView, View, StyleSheet } from "react-native";
-import { ArrowRight, Brain, ListChecks, PencilLine, Puzzle } from "lucide-react-native";
+import { ArrowRight, Link2, ListChecks, PencilLine, Puzzle } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme, type, fonts, spacing, radiusScale } from "../../theme";
@@ -15,7 +15,7 @@ import { Screen, ThemedText, Card } from "../../components/ui";
 /** Juegos del diccionario: ícono lucide + ruta bajo /juegos/[id]. */
 const GAMES = [
   { id: "flashcards", title: "Flashcards", desc: "Opción múltiple ES ↔ Nasa Yuwe", icon: ListChecks },
-  { id: "memoria", title: "Memoria", desc: "Empareja español y Nasa Yuwe", icon: Brain },
+  { id: "relacionar", title: "Relaciona", desc: "Une cada palabra en español con su pareja en Nasa Yuwe", icon: Link2 },
   { id: "completar", title: "Completar", desc: "Completa la traducción", icon: PencilLine },
   { id: "ordena", title: "Ordena", desc: "Ordena las fichas de la palabra", icon: Puzzle },
 ] as const;
