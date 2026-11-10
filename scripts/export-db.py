@@ -48,24 +48,44 @@ def normalize(text):
     return unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode("ascii").lower().strip()
 
 
+# Desactiva el seguimiento automático de redirecciones: el callback de
+# NextAuth responde 302 con Set-Cookie y debemos capturar esa cookie
+# (urllib por defecto sigue la redirección y pierde el Set-Cookie).
+import http.client as _http_client
+
+
 def http(method, path, data=None, cookie=None):
-    url = API_BASE + path
+    # http.client en lugar de urllib: urllib seguía redirecciones y perdía
+    # el Set-Cookie del 302 de NextAuth (CA-22). http.client no sigue
+    # redirecciones por defecto, así que el 302 se captura completo.
+    parsed = urllib.parse.urlparse(API_BASE)
+    host = parsed.hostname
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
     headers = {}
     body = None
     if data is not None:
         if isinstance(data, dict):
-            body = urllib.parse.urlencode(data).encode()
+            body = urllib.parse.urlencode(data)
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         else:
             body = data
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
     if cookie:
-        req.add_header("Cookie", cookie)
+        headers["Cookie"] = cookie
+    body_bytes = body.encode() if isinstance(body, str) else body
+    if body_bytes is not None:
+        headers["Content-Length"] = str(len(body_bytes))
+    conn = (
+        _http_client.HTTPSConnection(host, port)
+        if parsed.scheme == "https"
+        else _http_client.HTTPConnection(host, port)
+    )
     try:
-        with urllib.request.urlopen(req) as resp:
-            return resp.status, dict(resp.getheaders()), resp.read()
-    except urllib.error.HTTPError as e:
-        return e.code, dict(e.headers.items()), e.read()
+        conn.request(method, path, body=body_bytes, headers=headers)
+        resp = conn.getresponse()
+        raw = resp.read()
+        return resp.status, resp.getheaders(), raw
+    finally:
+        conn.close()
 
 
 def login():
@@ -77,19 +97,27 @@ def login():
     if not csrf:
         print("No se obtuvo csrfToken", file=sys.stderr)
         sys.exit(1)
+    # Capturar las cookies del GET (csrf-token, callback-url) para enviarlas
+    # en el POST: NextAuth valida el csrf contra la cookie.
+    csrf_cookies = []
+    for name, value in headers:
+        if name.lower() == "set-cookie":
+            csrf_cookies.append(value.strip().split(";")[0])
+    cookie = "; ".join(csrf_cookies) if csrf_cookies else None
     status, headers, body = http(
         "POST",
         "/api/auth/callback/credentials",
         {"csrfToken": csrf, "email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        cookie=cookie,
     )
     # capture session cookie
-    set_cookie = headers.get("Set-Cookie", "")
     cookie = None
-    for part in set_cookie.split(","):
-        part = part.strip()
-        if part.startswith("next-auth.session-token=") or part.startswith("__Secure-next-auth.session-token="):
-            cookie = part.split(";")[0]
-            break
+    for name, value in headers:
+        if name.lower() == "set-cookie":
+            v = value.strip()
+            if v.startswith("next-auth.session-token=") or v.startswith("__Secure-next-auth.session-token="):
+                cookie = v.split(";")[0]
+                break
     if not cookie:
         print("Login falló: sin cookie de sesión", file=sys.stderr)
         sys.exit(1)
