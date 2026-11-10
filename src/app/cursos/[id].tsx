@@ -6,6 +6,7 @@ import { useDb } from "../../db-context";
 import { theme, fonts, spacing, radiusScale } from "../../theme";
 import type { CourseRow, ModuleRow } from "../../db/course-types";
 import { Screen, ThemedText, Card } from "../../components/ui";
+import { CourseCelebration } from "../../components/course-celebration";
 import { CheckCircle2, Lock, ChevronRight } from "lucide-react-native";
 
 export default function CursoDetail() {
@@ -76,6 +77,11 @@ export default function CursoDetail() {
   const total = modules.reduce((a, m) => a + m.lessons.length, 0);
   const done = Object.values(progressMap).filter(Boolean).length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  // Celebración: al menos una lección y todas completadas en el progreso local.
+  const isComplete =
+    total > 0 &&
+    modules.every((m) => m.lessons.every((l) => progressMap[l.id] === true));
+  const firstLessonId = modules[0]?.lessons[0]?.id ?? null;
 
   return (
     <Screen>
@@ -100,6 +106,15 @@ export default function CursoDetail() {
               {done} de {total} lecciones · {pct}%
             </ThemedText>
           </View>
+        ) : null}
+
+        {isComplete && courseStore ? (
+          <CourseCelebration
+            courseId={course.id}
+            courseTitle={course.title}
+            firstLessonId={firstLessonId}
+            courseStore={courseStore}
+          />
         ) : null}
 
         {modules.map((mod) => (
