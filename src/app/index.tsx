@@ -19,7 +19,7 @@ import { UpdateNotice } from "../components/update-notice";
 import type { WordRow } from "../db/types";
 import { loadWordOfDay } from "../db/word-of-day";
 
-const logoColor = require("../assets/logo.png");
+const logoColor = require("../../assets/logo.png");
 
 /** Módulos del home: ícono lucide (o logo) + ruta del Tab correspondiente. */
 const MODULES = [

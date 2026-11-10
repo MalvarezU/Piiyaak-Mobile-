@@ -16,7 +16,7 @@ import { Image, Text, View } from "react-native";
 import { AuthProvider } from "../auth";
 import { DbProvider } from "../db-context";
 
-const logoWhite = require("../assets/logo-white.png");
+const logoWhite = require("../../assets/logo-white.png");
 
 /** Fuentes offline desde instalación (al binario del APK, sin red). */
 const FONT_MAP = {
