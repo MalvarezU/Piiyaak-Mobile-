@@ -1,0 +1,152 @@
+name: APK release
+
+# Publica la APK con la última semilla embebida.
+# - dispatch manual (botón admin "Publicar APK" en piiyaak.com)
+# - cron dominical: domingo 09:00 UTC = domingo 04:00 Colombia (madrugada),
+#   2h después del seed-content (domingo 07:00 UTC) para que la semilla
+#   esté fresca al compilar.
+#
+# Matriz de logging: versionCode, contentVersion, tamaños, URLs públicas.
+# NUNCA: keystore (ni en base64), passwords, valores de secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compila sin publicar en R2"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "0 9 * * 0"
+
+concurrency:
+  group: apk-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: piiyaak-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Verificar secretos requeridos
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET R2_PUBLIC_BASE_URL; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::falta el secreto $name (repo Settings → Secrets → Actions)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Descargar última semilla publicada
+        env:
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          latest_json="$(curl -fsSL --max-time 30 "$R2_PUBLIC_BASE_URL/apk/seed-latest.json")"
+          cv="$(printf '%s' "$latest_json" | jq -r '.contentVersion // empty')"
+          if [ -z "$cv" ]; then
+            echo "::error::latest.json sin contentVersion"
+            exit 1
+          fi
+          echo "SEED_CV=$cv" >> "$GITHUB_ENV"
+          mkdir -p dist/seed
+          curl -fsSL --max-time 120 -o dist/seed/manifest.json \
+            "$R2_PUBLIC_BASE_URL/seed/$cv/manifest.json"
+          curl -fsSL --max-time 600 -o dist/seed/piiyaak-seed.zip \
+            "$R2_PUBLIC_BASE_URL/seed/$cv/piiyaak-seed.zip"
+          echo "semilla descargada: contentVersion=$cv"
+
+      - name: Embeber semilla en assets/
+        run: |
+          set -euo pipefail
+          bunx --yes unzip dist/seed/piiyaak-seed.zip -d dist/seed/unpacked
+          # DB embebida: reemplaza la del repo
+          cp dist/seed/unpacked/piiyaak.db assets/piiyaak.db
+          # Medios: media/<sha>.<ext> → assets con nombre original del manifest
+          bun run --silent scripts/embed-seed-media.ts \
+            --manifest dist/seed/manifest.json \
+            --media dist/seed/unpacked/media
+          # Mapa de require() regenerado desde los archivos reales
+          npx tsx scripts/generate-bundled-media-map.ts
+
+      - name: Compilar APK release
+        env:
+          EXPO_PUBLIC_API_URL: https://piiyaak.com
+          EXPO_PUBLIC_SEED_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a,armeabi-v7a \
+            -PversionCode="${{ github.run_number }}" \
+            -PversionName="1.${{ github.run_number }}"
+
+      - name: Publicar en R2
+        if: ${{ !inputs.dry_run }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+          SEED_CV: ${{ env.SEED_CV }}
+        run: |
+          set -euo pipefail
+          vc="${{ github.run_number }}"
+          key="apk/$vc/piiyaak-$vc.apk"
+          bun run --silent scripts/upload-apk-to-r2.ts \
+            --file android/app/build/outputs/apk/release/app-release.apk \
+            --key "$key" \
+            --content-type "application/vnd.android.package-archive"
+          latest="{\"versionCode\":$vc,\"versionName\":\"1.$vc\",\"contentVersion\":$SEED_CV,\"apkUrl\":\"$R2_PUBLIC_BASE_URL/$key\",\"sizeBytes\":$(stat -c%s android/app/build/outputs/apk/release/app-release.apk),\"generatedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
+          echo "$latest" > dist/apk-latest.json
+          bun run --silent scripts/upload-apk-to-r2.ts \
+            --file dist/apk-latest.json \
+            --key "apk/latest.json" \
+            --content-type "application/json"
+          echo "APK publicada: $R2_PUBLIC_BASE_URL/$key"
+
+      - name: Resumen
+        run: |
+          echo "## APK release" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| métrica | valor |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| versionCode | ${{ github.run_number }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| semilla | seed/$SEED_CV |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| dry_run | ${{ inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
