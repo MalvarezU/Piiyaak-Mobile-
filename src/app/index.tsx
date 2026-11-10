@@ -5,7 +5,8 @@
  */
 import { useEffect, useState } from "react";
 import { FlatList, RefreshControl, TextInput, View, StyleSheet } from "react-native";
-import { BookOpen, Gamepad2, GraduationCap, Search } from "lucide-react-native";
+import { Gamepad2, GraduationCap, Search } from "lucide-react-native";
+import { Image } from "react-native";
 import { useRouter } from "expo-router";
 import { theme, fonts, type, radiusScale, spacing, minHit } from "../theme";
 import { Screen, ThemedText, Card, Chip } from "../components/ui";
@@ -18,11 +19,13 @@ import { UpdateNotice } from "../components/update-notice";
 import type { WordRow } from "../db/types";
 import { loadWordOfDay } from "../db/word-of-day";
 
-/** Módulos del home: ícono lucide + ruta del Tab correspondiente. */
+const logoColor = require("../assets/logo.png");
+
+/** Módulos del home: ícono lucide (o logo) + ruta del Tab correspondiente. */
 const MODULES = [
-  { title: "Diccionario", icon: BookOpen, href: "/explorar" },
-  { title: "Juegos", icon: Gamepad2, href: "/juegos" },
-  { title: "Cursos", icon: GraduationCap, href: "/cursos" },
+  { title: "Diccionario", icon: null, logo: true, href: "/explorar" },
+  { title: "Juegos", icon: Gamepad2, logo: false, href: "/juegos" },
+  { title: "Cursos", icon: GraduationCap, logo: false, href: "/cursos" },
 ] as const;
 
 export default function Inicio() {
@@ -116,7 +119,11 @@ export default function Inicio() {
           <View style={styles.tiles}>
             {MODULES.map((modulo) => (
               <Card key={modulo.href} onPress={() => router.push(modulo.href)} style={styles.tile}>
-                <modulo.icon size={24} color={theme.primary} />
+                {modulo.logo ? (
+                  <Image source={logoColor} style={{ width: 28, height: 28 }} resizeMode="contain" />
+                ) : (
+                  <modulo.icon size={24} color={theme.primary} />
+                )}
                 <ThemedText variant="label">{modulo.title}</ThemedText>
               </Card>
             ))}
@@ -126,7 +133,7 @@ export default function Inicio() {
           <Search size={20} color={theme.muted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar (mínimo 2 letras)..."
+            placeholder="Buscar palabra..."
             placeholderTextColor={theme.muted}
             value={q}
             onChangeText={setQ}

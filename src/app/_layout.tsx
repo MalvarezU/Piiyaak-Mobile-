@@ -12,8 +12,11 @@ import {
 } from "@expo-google-fonts/source-serif-4";
 import { theme, fonts } from "../theme";
 import { Home, ArrowDownAZ, Heart, History, Settings } from "lucide-react-native";
+import { Image, Text, View } from "react-native";
 import { AuthProvider } from "../auth";
 import { DbProvider } from "../db-context";
+
+const logoWhite = require("../assets/logo-white.png");
 
 /** Fuentes offline desde instalación (al binario del APK, sin red). */
 const FONT_MAP = {
@@ -48,7 +51,19 @@ export default function RootLayout() {
             },
           }}
         >
-          <Tabs.Screen name="index" options={{ title: "Inicio", tabBarIcon: ({ color, size }) => <Home color={color} size={size} /> }} />
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: "Inicio",
+              tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+              headerTitle: () => (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Image source={logoWhite} style={{ width: 28, height: 28 }} resizeMode="contain" />
+                  <Text style={{ fontFamily: fonts.serifSemibold, fontSize: 20, color: theme.onTint }}>Piiyaak</Text>
+                </View>
+              ),
+            }}
+          />
           <Tabs.Screen name="explorar" options={{ title: "A-Z", tabBarIcon: ({ color, size }) => <ArrowDownAZ color={color} size={size} /> }} />
           <Tabs.Screen name="favoritos" options={{ title: "Favoritas", tabBarIcon: ({ color, size }) => <Heart color={color} size={size} /> }} />
           <Tabs.Screen name="historial" options={{ title: "Historial", tabBarIcon: ({ color, size }) => <History color={color} size={size} /> }} />
