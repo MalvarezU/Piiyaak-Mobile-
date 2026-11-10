@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-vi.mock("react-native", () => ({ EventEmitter: class {} }));
+vi.mock("react-native", () => ({ EventEmitter: class {}, Platform: { OS: "ios" }, NativeModules: {} }));
+vi.mock("expo-modules-core", () => ({ EventEmitter: class {}, requireOptionalNativeModule: () => null, requireNativeModule: () => ({}), UnavailabilityError: class extends Error {}, uuid: () => "test-uuid" }));
 
 vi.mock("expo-file-system", () => import("./db/__mocks__/expo-file-system"));
 vi.mock("expo-file-system/legacy", () => import("./db/__mocks__/expo-file-system"));
