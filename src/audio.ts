@@ -40,7 +40,7 @@ async function resolveBundledAudioUri(url: string): Promise<string | null> {
   try {
     const asset = Asset.fromModule(mod);
     await asset.downloadAsync();
-    return asset.uri ?? null;
+    return asset.localUri ?? asset.uri ?? null;
   } catch {
     return null;
   }
