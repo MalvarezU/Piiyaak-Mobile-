@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Text, TextInput, TouchableOpacity, View, StyleSheet, ScrollView } from "react-native";
+import { TextInput, TouchableOpacity, View, StyleSheet, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
-import { theme } from "../../theme";
+import { theme, spacing, radiusScale, fonts, type, minHit } from "../../theme";
+import { Screen, ThemedText, Button } from "../../components/ui";
 import type { WordRow } from "../../db/types";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -20,10 +21,40 @@ function normalize(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
+/**
+ * Construye la pista: la palabra en Nasa Yuwe con ~35% de sus letras
+ * reemplazadas por "_" (mismo ancho visual). Posiciones deterministas
+ * a partir del id de la palabra para que la pista sea estable.
+ */
+function makeHint(word: string, seed: string): string {
+  const chars = Array.from(word);
+  const len = chars.length;
+  if (len === 0) return "";
+  const eligible: number[] = [];
+  for (let i = 0; i < len; i++) {
+    const ch = chars[i] as string;
+    if (ch.trim() !== "") eligible.push(i);
+  }
+  const pool = eligible.length > 0 ? eligible : chars.map((_, i) => i);
+  const hide = Math.max(1, Math.min(pool.length - 1, Math.round(pool.length * 0.35)));
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  const positions = new Set<number>();
+  let guard = 0;
+  while (positions.size < hide && guard < pool.length * 10 + 5) {
+    h = (h * 1103515245 + 12345) & 0x7fffffff;
+    const idx = pool[h % pool.length] as number;
+    positions.add(idx);
+    guard++;
+  }
+  return chars.map((c, i) => (positions.has(i) ? "_" : c)).join("");
+}
+
 export default function Completar() {
   const { store } = useDb();
   const router = useRouter();
   const [words, setWords] = useState<WordRow[]>([]);
+  const [hints, setHints] = useState<string[]>([]);
   const [current, setCurrent] = useState(0);
   const [input, setInput] = useState("");
   const [checked, setChecked] = useState(false);
@@ -36,13 +67,17 @@ export default function Completar() {
       if (!store) return;
       const all = await store.listAZ(null, 50, 0);
       if (!alive || all.length < 4) return;
-      if (alive) setWords(shuffle(all as WordRow[]).slice(0, 8));
+      if (alive) {
+        const picked = shuffle(all as WordRow[]).slice(0, 8);
+        setWords(picked);
+        setHints(picked.map((w) => makeHint(w.nasaYuwe, w.id)));
+      }
     })();
     return () => { alive = false; };
   }, [store]);
 
   const word = words[current];
-  if (!word) return <View style={styles.root}><Text style={styles.muted}>Cargando...</Text></View>;
+  if (!word) return <Screen><View style={styles.center}><ThemedText variant="body" style={styles.muted}>Cargando...</ThemedText></View></Screen>;
   const isCorrect = normalize(input) === normalize(word.nasaYuwe);
 
   const handleCheck = () => {
@@ -57,70 +92,110 @@ export default function Completar() {
     else setCurrent((c) => c + 1);
   };
 
-  if (!store) return <View style={styles.root}><Text style={styles.muted}>Preparando...</Text></View>;
-  if (words.length === 0) return <View style={styles.root}><Text style={styles.muted}>Cargando...</Text></View>;
+  if (!store) return <Screen><View style={styles.center}><ThemedText variant="body" style={styles.muted}>Preparando...</ThemedText></View></Screen>;
+  if (words.length === 0) return <Screen><View style={styles.center}><ThemedText variant="body" style={styles.muted}>Cargando...</ThemedText></View></Screen>;
 
   if (done) {
     return (
-      <View style={styles.root}>
-        <Text style={styles.title}>¡Terminado!</Text>
-        <Text style={styles.score}>Aciertos: {correct} / {words.length}</Text>
-        <TouchableOpacity style={styles.btn} onPress={() => { setDone(false); setCurrent(0); setCorrect(0); setInput(""); setChecked(false); }}>
-          <Text style={styles.btnText}>Reintentar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.link} onPress={() => router.back()}>
-          <Text style={styles.linkText}>Volver</Text>
-        </TouchableOpacity>
-      </View>
+      <Screen>
+        <View style={styles.doneContainer}>
+          <ThemedText variant="title" style={styles.doneTitle}>¡Terminado!</ThemedText>
+          <ThemedText variant="title" style={styles.score}>Aciertos: {correct} / {words.length}</ThemedText>
+          <Button title="Reintentar" onPress={() => { setDone(false); setCurrent(0); setCorrect(0); setInput(""); setChecked(false); }} style={styles.fullBtn} />
+          <TouchableOpacity style={styles.link} onPress={() => router.back()}>
+            <ThemedText variant="body" style={styles.linkText}>Volver</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </Screen>
     );
   }
 
+  const hint = hints[current] ?? makeHint(word.nasaYuwe, word.id);
+
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.progress}>{current + 1} / {words.length}</Text>
-      <Text style={styles.prompt}>Escribe la traducción en Nasa Yuwe:</Text>
-      <Text style={styles.word}>{word.spanish}</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Nasa Yuwe..."
-        value={input}
-        onChangeText={setInput}
-        autoCapitalize="none"
-        editable={!checked}
-      />
-      {!checked ? (
-        <TouchableOpacity style={styles.btn} onPress={handleCheck}>
-          <Text style={styles.btnText}>Comprobar</Text>
-        </TouchableOpacity>
-      ) : (
-        <>
-          <Text style={[styles.result, isCorrect ? styles.ok : styles.bad]}>
-            {isCorrect ? "✓ Correcto" : `✗ La respuesta era: ${word.nasaYuwe}`}
-          </Text>
-          <TouchableOpacity style={styles.btn} onPress={handleNext}>
-            <Text style={styles.btnText}>Siguiente</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content}>
+        <ThemedText variant="caption" style={styles.progress}>
+          {current + 1} / {words.length}
+        </ThemedText>
+        <ThemedText variant="body" style={styles.prompt}>
+          Completa la traducción en Nasa Yuwe:
+        </ThemedText>
+        <ThemedText variant="word" style={styles.word}>
+          {word.spanish}
+        </ThemedText>
+        <ThemedText variant="word" style={styles.hint}>
+          {hint}
+        </ThemedText>
+        <TextInput
+          style={styles.input}
+          placeholder="Escribe la palabra completa..."
+          value={input}
+          onChangeText={setInput}
+          autoCapitalize="none"
+          editable={!checked}
+        />
+        {!checked ? (
+          <Button title="Comprobar" onPress={handleCheck} style={styles.fullBtn} />
+        ) : (
+          <>
+            <ThemedText variant="body" style={[styles.result, isCorrect ? styles.ok : styles.bad]}>
+              {isCorrect ? "✓ Correcto" : `✗ La respuesta era: ${word.nasaYuwe}`}
+            </ThemedText>
+            <Button title="Siguiente" onPress={handleNext} style={styles.fullBtn} />
+          </>
+        )}
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.background, padding: 16 },
-  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", color: theme.primary, marginBottom: 8 },
-  content: { gap: 8 },
-  progress: { color: theme.muted, textAlign: "center", marginBottom: 8 },
-  prompt: { fontSize: 16, color: theme.muted, textAlign: "center" },
-  word: { fontSize: 24, fontWeight: "bold", textAlign: "center", color: theme.primary, marginBottom: 12 },
-  input: { backgroundColor: theme.card, borderColor: theme.border, borderWidth: 1, borderRadius: theme.radius, padding: 12, fontSize: 16 },
-  btn: { backgroundColor: theme.primary, borderRadius: theme.radius, padding: 14, alignItems: "center", marginTop: 8 },
-  btnText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  result: { fontSize: 16, textAlign: "center", marginTop: 8 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  muted: { color: theme.muted },
+  content: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  progress: { textAlign: "center", color: theme.muted },
+  prompt: { textAlign: "center", color: theme.muted },
+  word: { textAlign: "center", color: theme.primary },
+  hint: {
+    textAlign: "center",
+    color: theme.text,
+    letterSpacing: 4,
+    fontFamily: fonts.serif,
+  },
+  input: {
+    backgroundColor: theme.card,
+    borderColor: theme.border,
+    borderWidth: 1,
+    borderRadius: radiusScale.md,
+    borderCurve: "continuous",
+    padding: spacing.md,
+    fontSize: type.body.fontSize,
+    fontFamily: type.body.fontFamily,
+    color: theme.text,
+  },
+  result: { textAlign: "center" },
   ok: { color: theme.success },
   bad: { color: theme.danger },
-  link: { padding: 12, alignItems: "center" },
-  linkText: { color: theme.primary, fontSize: 15 },
-  score: { fontSize: 24, textAlign: "center", marginVertical: 16 },
-  muted: { color: theme.muted, textAlign: "center", marginTop: 32 },
+  fullBtn: { alignSelf: "stretch", minHeight: minHit },
+  doneContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  doneTitle: { textAlign: "center", color: theme.primary },
+  score: { textAlign: "center", color: theme.text },
+  link: { padding: spacing.md, alignItems: "center" },
+  linkText: { color: theme.primary },
 });
