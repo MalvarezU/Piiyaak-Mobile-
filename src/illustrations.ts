@@ -23,7 +23,18 @@ try {
 }
 
 async function resolveBundledIllustrationUri(url: string): Promise<string | null> {
-  const mod = BUNDLED_ILLUSTRATIONS[url];
+  let mod = BUNDLED_ILLUSTRATIONS[url];
+  if (mod === undefined) {
+    // Puente offline: el servidor ya sirve URLs R2 absolutas con nombres
+    // significativos (`.../Tupa.png`); se matchea por base insensible a caso.
+    const base = url.split("?")[0]?.split("/").pop()?.toLowerCase();
+    const entry = base
+      ? Object.entries(BUNDLED_ILLUSTRATIONS).find(
+          ([k]) => k.split("/").pop()?.toLowerCase() === base
+        )
+      : undefined;
+    mod = entry?.[1];
+  }
   if (mod === undefined) return null;
   try {
     const asset = Asset.fromModule(mod);

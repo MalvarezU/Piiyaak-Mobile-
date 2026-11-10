@@ -35,7 +35,20 @@ try {
 }
 
 async function resolveBundledAudioUri(url: string): Promise<string | null> {
-  const mod = BUNDLED_AUDIOS[url];
+  let mod = BUNDLED_AUDIOS[url];
+  if (mod === undefined) {
+    // Puente offline: el servidor ya sirve URLs R2 absolutas con prefijo
+    // `audios/{wordId}/{timestamp}-` delante del nombre original, así que
+    // se matchea por sufijo del nombre base (`...-Tupa.mp3` ↔ `Tupa.mp3`).
+    const base = url.split("?")[0]?.split("/").pop();
+    const entry = base
+      ? Object.entries(BUNDLED_AUDIOS).find(([k]) => {
+          const bundled = k.split("/").pop() ?? "";
+          return bundled.length > 0 && base.endsWith(bundled);
+        })
+      : undefined;
+    mod = entry?.[1];
+  }
   if (mod === undefined) return null;
   try {
     const asset = Asset.fromModule(mod);
