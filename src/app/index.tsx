@@ -26,7 +26,7 @@ const MODULES = [
 ] as const;
 
 export default function Inicio() {
-  const { store, ready, sync, seedState, retrySeed, continueTextOnly, updateAvailable, acceptUpdate, dismissUpdate } = useDb();
+  const { store, ready, sync, lastSync, seedState, retrySeed, continueTextOnly, updateAvailable, acceptUpdate, dismissUpdate } = useDb();
   const { session } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -50,7 +50,9 @@ export default function Inicio() {
     };
   }, [q, store]);
 
-  // Palabra del día (cacheada por fecha en kv; anónima desde B1)
+  // Palabra del día (cacheada por fecha en kv; anónima desde B1).
+  // Se re-resuelve cuando cambia lastSync: tras un sync el vocabulario
+  // puede traer ids nuevos y el wodId cacheado queda huérfano.
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -58,7 +60,7 @@ export default function Inicio() {
       const today = new Date().toISOString().slice(0, 10);
       try {
         const w = await loadWordOfDay(store, today, session);
-        if (alive && w) setWod(w);
+        if (alive) setWod(w);
       } catch {
         // offline sin caché: no hay palabra del día
       }
@@ -66,7 +68,7 @@ export default function Inicio() {
     return () => {
       alive = false;
     };
-  }, [store, session]);
+  }, [store, session, lastSync]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

@@ -374,6 +374,10 @@ export class SQLiteWordStore implements WordStore {
     if (favs) {
       conditions.push(`word_id NOT IN (${favs})`);
     }
+    // Recursos de cursos/lecciones (word_id con namespace `lesson:` o
+    // `course:`): nunca entran al manifiesto del diccionario; se conservan.
+    conditions.push(`word_id NOT LIKE 'lesson:%'`);
+    conditions.push(`word_id NOT LIKE 'course:%'`);
     if (conditions.length === 0) return { removed: 0 };
     const res = await this.db.runAsync(
       `DELETE FROM media_manifest WHERE ${conditions.join(" AND ")}`

@@ -151,6 +151,9 @@ export class MemoryWordStore implements WordStore {
     let removed = 0;
     for (const [key, row] of [...this.manifest.entries()]) {
       if (valid.has(key) || favs.has(row.wordId)) continue;
+      // Recursos de cursos/lecciones (word_id con namespace `lesson:` o
+      // `course:`): nunca entran al manifiesto del diccionario; se conservan.
+      if (row.wordId.startsWith("lesson:") || row.wordId.startsWith("course:")) continue;
       this.manifest.delete(key);
       removed++;
     }
