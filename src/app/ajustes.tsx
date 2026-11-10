@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Text, TextInput, TouchableOpacity, View, StyleSheet } from "react-native";
-import { useAuth } from "../auth";
+import { useAuth, AUTH_UI_ENABLED } from "../auth";
 import { useDb } from "../db-context";
 import { useRouter } from "expo-router";
 import { theme } from "../theme";
@@ -33,6 +33,8 @@ export default function Ajustes() {
 
   return (
     <View style={styles.root}>
+      {AUTH_UI_ENABLED ? (
+        <>
       <Text style={styles.h}>Cuenta</Text>
       {session ? (
         <>
@@ -70,6 +72,8 @@ export default function Ajustes() {
           </TouchableOpacity>
         </>
       )}
+        </>
+      ) : null}
 
       <Text style={styles.h}>Sincronización</Text>
       <Text style={styles.row}>

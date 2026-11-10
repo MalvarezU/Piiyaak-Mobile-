@@ -3,7 +3,7 @@ import { FlatList, Image, Pressable, TextInput, View, StyleSheet } from "react-n
 import { useRouter } from "expo-router";
 import { GraduationCap, RefreshCw, ArrowRight, Search, X } from "lucide-react-native";
 import { useDb } from "../../db-context";
-import { useAuth } from "../../auth";
+import { useAuth, AUTH_UI_ENABLED } from "../../auth";
 import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
 import { resolveCachedUri } from "../../db/media-fs";
 import { toAbsoluteUrl } from "../../api";
@@ -386,7 +386,7 @@ export default function Cursos() {
                     style={styles.heroCta}
                   />
                 ) : null}
-                {!session ? (
+                {!session && AUTH_UI_ENABLED ? (
                   <Chip
                     label="Sin sesión: tu progreso vive en este dispositivo"
                     tone="neutral"

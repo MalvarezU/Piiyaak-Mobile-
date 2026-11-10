@@ -4,6 +4,14 @@ import { loginRequest, REGISTRATION_DISABLED_MESSAGE, type SessionState, apiFetc
 
 const SESSION_KEY = "piiyaak:session";
 
+/**
+ * Bandera temporal: oculta toda la UI de cuentas (login, registro,
+ * recuperar, cerrar sesión, chip de "sin sesión") sin borrar la lógica.
+ * El sync autenticado sigue intacto (sesión siempre null por ahora).
+ * Para reactivar: poner en `true`.
+ */
+export const AUTH_UI_ENABLED = false;
+
 interface AuthContextValue {
   session: SessionState | null;
   ready: boolean;
