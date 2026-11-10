@@ -1,11 +1,13 @@
 /**
  * Explorar — Diccionario de la A a la Z: filtro por categoría y listado
- * agrupado por letra inicial (encabezados de grupo con recuento). El
- * rediseño es visual (kit base, src/components/ui); la lógica de datos
- * —store, sync, paginación por lotes y reseteo de página al cambiar de
- * filtro— queda intacta.
+ * agrupado por letra inicial (encabezados de grupo con recuento). Sobre el
+ * kit base (src/components/ui), la lógica de datos cubre sync, paginación
+ * por lotes, reseteo de página al cambiar de filtro, cerrojo contra dobles
+ * disparos de onEndReached y nonce de refresco manual a página 0. El
+ * recuento global solo se muestra sin filtro: count() no filtrado no
+ * refleja la categoría activa.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, ScrollView, View, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { BookOpen, Volume2 } from "lucide-react-native";
@@ -35,6 +37,10 @@ export default function Explorar() {
   const [total, setTotal] = useState(0);
   const [category, setCategory] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  // Nonce de refresco manual: fuerza el re-fetch aun cuando page ya es 0.
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  // Cerrojo de consulta en vuelo: bloquea dobles disparos de onEndReached.
+  const fetchingRef = useRef(false);
   const PAGE = 50;
 
   useEffect(() => {
@@ -51,20 +57,33 @@ export default function Explorar() {
 
   useEffect(() => {
     let alive = true;
+    // Respeta el cerrojo: si ya hay una consulta en vuelo, esta
+    // ejecución no encadena otra.
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     (async () => {
-      if (!store) return;
-      const [rows, n] = await Promise.all([
-        store.listAZ(category, PAGE, page * PAGE),
-        store.count(),
-      ]);
-      if (!alive) return;
-      setWords((prev) => (page === 0 ? rows : [...prev, ...rows]));
-      setTotal(n);
+      try {
+        if (!store) return;
+        const [rows, n] = await Promise.all([
+          store.listAZ(category, PAGE, page * PAGE),
+          store.count(),
+        ]);
+        if (!alive) return;
+        setWords((prev) => (page === 0 ? rows : [...prev, ...rows]));
+        setTotal(n);
+      } finally {
+        // Se libera solo si esta ejecución sigue vigente; en caso
+        // contrario el cleanup ya liberó el cerrojo.
+        if (alive) fetchingRef.current = false;
+      }
     })();
     return () => {
       alive = false;
+      // El cerrojo es del componente: se libera en desmonte y en cada
+      // re-ejecución del effect.
+      fetchingRef.current = false;
     };
-  }, [store, page, category]);
+  }, [store, page, category, refreshNonce]);
 
   // Reset de la paginación al cambiar el filtro de categoría.
   useEffect(() => {
@@ -78,6 +97,8 @@ export default function Explorar() {
       await sync();
       setPage(0);
       setWords([]);
+      // Con page ya en 0 el setPage no dispara el effect: el nonce sí.
+      setRefreshNonce((n) => n + 1);
     } finally {
       setRefreshing(false);
     }
@@ -123,7 +144,11 @@ export default function Explorar() {
         ))}
       </ScrollView>
       <ThemedText variant="caption" style={styles.count}>
-        {words.length} de {total} palabras
+        {/* Sin filtro: progreso paginación. Con filtro: count() es global
+            y no refleja el filtro; solo el recuento local es honesto. */}
+        {category === null
+          ? `${words.length} de ${total} palabras`
+          : `${words.length} palabra${words.length === 1 ? "" : "s"}`}
       </ThemedText>
       {words.length === 0 ? (
         <EmptyState message="Sin palabras en esta categoría" icon="📚" />
@@ -192,6 +217,9 @@ export default function Explorar() {
           );
         }}
         onEndReached={() => {
+          // RN puede disparar dos veces con fetch en vuelo: sin cerrojo,
+          // page avanza dos veces y se pierde un lote entero.
+          if (fetchingRef.current) return;
           if (words.length < total) setPage((p) => p + 1);
         }}
         onEndReachedThreshold={0.5}
