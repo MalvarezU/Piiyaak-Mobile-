@@ -5,12 +5,13 @@
  * mientras el diccionario no esté listo (Card estática; la nota explica
  * por qué). Los emojis se reemplazan 1:1 por íconos lucide.
  */
+import { useEffect, useState } from "react";
 import { ScrollView, View, StyleSheet } from "react-native";
-import { ArrowRight, Link2, ListChecks, PencilLine, Puzzle } from "lucide-react-native";
+import { ArrowRight, Headphones, Link2, ListChecks, PencilLine, Puzzle } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme, type, fonts, spacing, radiusScale } from "../../theme";
-import { Screen, ThemedText, Card } from "../../components/ui";
+import { Screen, ThemedText, Card, Chip } from "../../components/ui";
 
 /** Juegos del diccionario: ícono lucide + ruta bajo /juegos/[id]. */
 const GAMES = [
@@ -18,11 +19,33 @@ const GAMES = [
   { id: "relacionar", title: "Relaciona", desc: "Une cada palabra en español con su pareja en Nasa Yuwe", icon: Link2 },
   { id: "completar", title: "Completar", desc: "Completa la traducción", icon: PencilLine },
   { id: "ordena", title: "Ordena", desc: "Ordena las fichas de la palabra", icon: Puzzle },
+  {
+    id: "escucha",
+    title: "Escucha",
+    desc: "Escucha el audio en Nasa Yuwe y elige su significado en español.",
+    icon: Headphones,
+    locked: true,
+    lockedBadge: "Requiere audios",
+    lockedNote: "Necesita al menos 8 palabras con audio publicado.",
+  },
 ] as const;
 
 export default function JuegosHub() {
   const { store } = useDb();
   const router = useRouter();
+  const [audioCount, setAudioCount] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!store) return;
+      const n = await store.countWordsWithAudio();
+      if (alive) setAudioCount(n);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [store]);
 
   return (
     <Screen>
@@ -38,25 +61,53 @@ export default function JuegosHub() {
           </ThemedText>
         </View>
         <View style={styles.tiles}>
-          {GAMES.map((g) => (
-            <Card
-              key={g.id}
-              onPress={store ? () => router.push(`/juegos/${g.id}` as any) : undefined}
-            >
-              <View style={styles.row}>
-                <View style={styles.iconBox}>
-                  <g.icon size={24} color={theme.primary} />
+          {GAMES.map((g) => {
+            const locked = g.id === "escucha" ? audioCount < 8 : false;
+            if (locked) {
+              return (
+                <Card key={g.id}>
+                  <View style={styles.row}>
+                    <View style={[styles.iconBox, styles.iconBoxLocked]}>
+                      <g.icon size={24} color={theme.muted} />
+                    </View>
+                    <View style={styles.tileBody}>
+                      <ThemedText variant="bodyMedium" style={styles.tileTitle}>
+                        {g.title}
+                      </ThemedText>
+                      <ThemedText variant="caption">{g.desc}</ThemedText>
+                      {"lockedNote" in g && g.lockedNote ? (
+                        <ThemedText variant="caption" style={styles.note}>
+                          {g.lockedNote}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    {"lockedBadge" in g && g.lockedBadge ? (
+                      <Chip label={g.lockedBadge} tone="neutral" />
+                    ) : null}
+                  </View>
+                </Card>
+              );
+            }
+            return (
+              <Card
+                key={g.id}
+                onPress={store ? () => router.push(`/juegos/${g.id}` as any) : undefined}
+              >
+                <View style={styles.row}>
+                  <View style={styles.iconBox}>
+                    <g.icon size={24} color={theme.primary} />
+                  </View>
+                  <View style={styles.tileBody}>
+                    <ThemedText variant="bodyMedium" style={styles.tileTitle}>
+                      {g.title}
+                    </ThemedText>
+                    <ThemedText variant="caption">{g.desc}</ThemedText>
+                  </View>
+                  <ArrowRight size={16} color={theme.primary} />
                 </View>
-                <View style={styles.tileBody}>
-                  <ThemedText variant="bodyMedium" style={styles.tileTitle}>
-                    {g.title}
-                  </ThemedText>
-                  <ThemedText variant="caption">{g.desc}</ThemedText>
-                </View>
-                <ArrowRight size={16} color={theme.primary} />
-              </View>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </View>
         {!store ? (
           <ThemedText variant="body" style={styles.pending}>
@@ -93,6 +144,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  iconBoxLocked: {
+    backgroundColor: theme.background,
+  },
   tileBody: {
     flex: 1,
     gap: spacing.xs,
@@ -102,6 +156,9 @@ const styles = StyleSheet.create({
     // variant + familia), sin fontSizes crudos.
     ...type.bodyMedium,
     fontFamily: fonts.sansSemibold,
+  },
+  note: {
+    color: theme.muted,
   },
   pending: { color: theme.muted },
 });
