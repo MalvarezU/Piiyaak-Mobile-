@@ -7,12 +7,16 @@
 import { Pressable, View, StyleSheet } from "react-native";
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
+import type { AccessibilityProps } from "react-native";
 import { theme, radiusScale, spacing, shadows } from "../../theme";
 
 export interface CardProps {
   children: ReactNode;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
+  accessibilityRole?: AccessibilityProps["accessibilityRole"];
+  accessibilityLabel?: AccessibilityProps["accessibilityLabel"];
+  accessibilityState?: AccessibilityProps["accessibilityState"];
 }
 
 const styles = StyleSheet.create({
@@ -28,16 +32,35 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.92 },
 });
 
-export function Card({ children, onPress, style }: CardProps) {
+export function Card({
+  children,
+  onPress,
+  style,
+  accessibilityRole,
+  accessibilityLabel,
+  accessibilityState,
+}: CardProps) {
   if (onPress) {
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole={accessibilityRole}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={accessibilityState}
         style={({ pressed }) => [styles.base, pressed ? styles.pressed : null, style]}
       >
         {children}
       </Pressable>
     );
   }
-  return <View style={[styles.base, style]}>{children}</View>;
+  return (
+    <View
+      accessibilityRole={accessibilityRole}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={accessibilityState}
+      style={[styles.base, style]}
+    >
+      {children}
+    </View>
+  );
 }

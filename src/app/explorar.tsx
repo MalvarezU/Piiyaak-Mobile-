@@ -151,7 +151,7 @@ export default function Explorar() {
           : `${words.length} palabra${words.length === 1 ? "" : "s"}`}
       </ThemedText>
       {words.length === 0 ? (
-        <EmptyState message="Sin palabras en esta categoría" icon="📚" />
+        <EmptyState message="Sin palabras en esta categoría" icon={<BookOpen size={32} color={theme.muted} />} />
       ) : null}
       <FlatList
         data={words}

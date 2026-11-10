@@ -1,15 +1,20 @@
 import { Text, View, StyleSheet } from "react-native";
+import type { ReactNode } from "react";
 import { theme } from "../theme";
 
 export interface EmptyStateProps {
   message: string;
-  icon?: string;
+  icon?: ReactNode;
 }
 
 export function EmptyState({ message, icon }: EmptyStateProps) {
   return (
     <View style={styles.root}>
-      {icon ? <Text style={styles.icon}>{icon}</Text> : null}
+      {icon
+        ? typeof icon === "string"
+          ? <Text style={styles.icon}>{icon}</Text>
+          : icon
+        : null}
       <Text style={styles.message}>{message}</Text>
     </View>
   );
