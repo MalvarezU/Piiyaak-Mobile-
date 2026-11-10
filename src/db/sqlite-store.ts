@@ -186,8 +186,8 @@ export class SQLiteWordStore implements WordStore {
        VALUES ${placeholders}
        ON CONFLICT(id) DO UPDATE SET
          spanish=excluded.spanish, nasaYuwe=excluded.nasaYuwe,
-         pronunciation=excluded.pronunciation, audioUrl=COALESCE(excluded.audioUrl, audioUrl),
-         illustrationUrl=COALESCE(excluded.illustrationUrl, illustrationUrl),
+         pronunciation=excluded.pronunciation, audioUrl=COALESCE(NULLIF(excluded.audioUrl, ''), audioUrl),
+         illustrationUrl=COALESCE(NULLIF(excluded.illustrationUrl, ''), illustrationUrl),
          culturalContext=excluded.culturalContext, category=excluded.category,
          examples=excluded.examples, updatedAt=excluded.updatedAt,
          spanish_norm=excluded.spanish_norm, nasaYuwe_norm=excluded.nasaYuwe_norm`,
