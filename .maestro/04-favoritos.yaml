@@ -1,0 +1,38 @@
+appId: com.piiyaak.app
+---
+# 04-favoritos: marcar Casa como favorita y verificarla en la tab.
+# Icono real de favorita en src/app/ficha/[id].tsx: Heart de lucide, con
+# botones "Guardar en favoritas" / "En favoritas" (NO hay estrella).
+# Tab real en src/app/_layout.tsx: "Favoritas" (NO "Favoritos").
+# El `when` hace el flujo idempotente: si una corrida anterior dejo a Casa
+# en favoritas (persisten en AsyncStorage), primero la desmarca.
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Buscar palabra..."
+    timeout: 20000
+- tapOn: "Buscar palabra..."
+- inputText: "casa"
+- extendedWaitUntil:
+    visible: "Casa"
+    timeout: 15000
+- tapOn: "Casa"
+- extendedWaitUntil:
+    visible: "Nasa Yuwe:"
+    timeout: 10000
+- tapOn: "En favoritas"
+  when:
+    visible: "En favoritas"
+- extendedWaitUntil:
+    visible: "Guardar en favoritas"
+    timeout: 5000
+- tapOn: "Guardar en favoritas"
+- extendedWaitUntil:
+    visible: "En favoritas"
+    timeout: 5000
+# La tab bar sigue visible sobre la ficha: navegacion directa sin back.
+- tapOn: "Favoritas"
+- extendedWaitUntil:
+    visible: "Casa"
+    timeout: 10000
+- assertVisible: "Yat"

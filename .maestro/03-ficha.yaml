@@ -1,0 +1,22 @@
+appId: com.piiyaak.app
+---
+# 03-ficha: desde la busqueda de "casa", abrir el detalle.
+# La ficha de Casa NO tiene audio (audioUrl null en semilla), asi que se
+# verifica la etiqueta real "Nasa Yuwe:" + la traduccion "Yat"
+# (src/app/ficha/[id].tsx).
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Buscar palabra..."
+    timeout: 20000
+- tapOn: "Buscar palabra..."
+- inputText: "casa"
+- extendedWaitUntil:
+    visible: "Casa"
+    timeout: 15000
+# Tap exacto: "Casa" solo aparece en la fila de resultado (unico match).
+- tapOn: "Casa"
+- extendedWaitUntil:
+    visible: "Nasa Yuwe:"
+    timeout: 10000
+- assertVisible: "Yat"

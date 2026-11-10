@@ -1,0 +1,18 @@
+appId: com.piiyaak.app
+---
+# 02-buscar: buscar "casa" desde el buscador del home.
+# Placeholder real del TextInput en src/app/index.tsx: "Buscar palabra...".
+# "casa" existe en la semilla (Casa -> Yat, sustantivo); es el UNICO match,
+# asi que el selector "Casa" no es ambiguo.
+# Timeout amplio: debounce 250ms + consulta SQLite.
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Buscar palabra..."
+    timeout: 20000
+- tapOn: "Buscar palabra..."
+- inputText: "casa"
+- extendedWaitUntil:
+    visible: "Casa"
+    timeout: 15000
+- assertVisible: "Yat"

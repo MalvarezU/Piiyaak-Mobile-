@@ -2,29 +2,15 @@ import { useEffect, useState, useRef } from "react";
 import { View, StyleSheet, ScrollView } from "react-native";
 import { Volume2 } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { Asset } from "expo-asset";
 import { useDb } from "../../db-context";
 import { theme, spacing, minHit } from "../../theme";
 import { Screen, ThemedText, Button } from "../../components/ui";
 import type { WordRow } from "../../db/types";
 import { createAudioPlayer } from "../../audio-player";
+import { resolveBundledAudioUri } from "../../audio";
 
 const MIN = 4;
 const MAX_ROUNDS = 8;
-
-const AUDIO_ASSETS: Record<string, number> = {
-  "audios/Buk.mp3": require("../../../assets/audios/Buk.mp3"),
-  "audios/Kupe.mp3": require("../../../assets/audios/Kupe.mp3"),
-  "audios/Les.mp3": require("../../../assets/audios/Les.mp3"),
-  "audios/Nxusxa.mp3": require("../../../assets/audios/Nxusxa.mp3"),
-  "audios/Peennxi.mp3": require("../../../assets/audios/Peennxi.mp3"),
-  "audios/Pukat.mp3": require("../../../assets/audios/Pukat.mp3"),
-  "audios/Taul.mp3": require("../../../assets/audios/Taul.mp3"),
-  "audios/Tupa.mp3": require("../../../assets/audios/Tupa.mp3"),
-  "audios/Uh.mp3": require("../../../assets/audios/Uh.mp3"),
-  "audios/Vxlxilx.mp3": require("../../../assets/audios/Vxlxilx.mp3"),
-  "audios/Zik.mp3": require("../../../assets/audios/Zik.mp3"),
-};
 
 function shuffle<T>(arr: T[]): T[] {
   const copy = [...arr];
@@ -35,18 +21,6 @@ function shuffle<T>(arr: T[]): T[] {
     copy[j] = tmp;
   }
   return copy;
-}
-
-async function resolveAudioUri(audioUrl: string): Promise<string | null> {
-  const mod = AUDIO_ASSETS[audioUrl];
-  if (mod == null) return null;
-  try {
-    const asset = Asset.fromModule(mod);
-    await asset.downloadAsync();
-    return asset.localUri ?? asset.uri ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export default function Escucha() {
@@ -108,7 +82,7 @@ export default function Escucha() {
     if (!currentWord?.audioUrl || playing) return;
     setPlaying(true);
     try {
-      const uri = await resolveAudioUri(currentWord.audioUrl);
+      const uri = await resolveBundledAudioUri(currentWord.audioUrl);
       if (!uri) {
         setPlaying(false);
         return;

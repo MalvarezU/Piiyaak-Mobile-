@@ -1,0 +1,12 @@
+appId: com.piiyaak.app
+---
+# 01-arranque: el home debe mostrar los tres módulos.
+# Textos reales de src/app/index.tsx (const MODULES).
+# Timeout amplio en el primer assert: primer arranque copia la semilla SQLite.
+- launchApp
+- waitForAnimationToEnd
+- extendedWaitUntil:
+    visible: "Diccionario"
+    timeout: 20000
+- assertVisible: "Juegos"
+- assertVisible: "Cursos"
