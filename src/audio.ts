@@ -1,6 +1,50 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { Asset } from "expo-asset";
 import { defaultMediaCache } from "./db/media-fs";
 import type { MediaRef } from "./db/media-cache";
+
+// Mapa estático de audios bundled (mismo patrón que ilustraciones):
+// la DB almacena la ruta relativa ("audios/X.mp3") y aquí se resuelve
+// a la URI local del asset embebido en el APK.
+const BUNDLED_AUDIOS: Record<string, number> = {};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Buk.mp3"] = require("../assets/audios/Buk.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Kupe.mp3"] = require("../assets/audios/Kupe.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Les.mp3"] = require("../assets/audios/Les.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Nxusxa.mp3"] = require("../assets/audios/Nxusxa.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Peennxi.mp3"] = require("../assets/audios/Peennxi.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Pukat.mp3"] = require("../assets/audios/Pukat.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Taul.mp3"] = require("../assets/audios/Taul.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Tupa.mp3"] = require("../assets/audios/Tupa.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Uh.mp3"] = require("../assets/audios/Uh.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Vxlxilx.mp3"] = require("../assets/audios/Vxlxilx.mp3");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  BUNDLED_AUDIOS["audios/Zik.mp3"] = require("../assets/audios/Zik.mp3");
+} catch {
+  // Entorno de test (vitest/ESM): require() no disponible.
+}
+
+async function resolveBundledAudioUri(url: string): Promise<string | null> {
+  const mod = BUNDLED_AUDIOS[url];
+  if (mod === undefined) return null;
+  try {
+    const asset = Asset.fromModule(mod);
+    await asset.downloadAsync();
+    return asset.uri ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Audios offline como adaptador delgado sobre `MediaCache` (B3-03).
@@ -131,6 +175,10 @@ export async function resolveAudioUri(word: WordAudio): Promise<string> {
     migrateInBackground(legacy, cache.localUriFor(ref));
     return legacy;
   }
+  // Audios bundled en el APK (assets/audios/): se resuelven a la URI
+  // local del asset sin red.
+  const bundled = await resolveBundledAudioUri(word.audioUrl);
+  if (bundled) return bundled;
   return word.audioUrl;
 }
 
