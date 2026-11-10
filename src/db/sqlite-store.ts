@@ -105,6 +105,7 @@ export interface WordStore {
   listCategories(): Promise<string[]>;
   getById(id: string): Promise<WordRow | null>;
   count(): Promise<number>;
+  countWordsWithAudio(): Promise<number>;
   getLastSync(): Promise<string | null>;
   setLastSync(iso: string): Promise<void>;
   getKV(key: string): Promise<string | null>;
@@ -185,8 +186,8 @@ export class SQLiteWordStore implements WordStore {
        VALUES ${placeholders}
        ON CONFLICT(id) DO UPDATE SET
          spanish=excluded.spanish, nasaYuwe=excluded.nasaYuwe,
-         pronunciation=excluded.pronunciation, audioUrl=excluded.audioUrl,
-         illustrationUrl=excluded.illustrationUrl,
+         pronunciation=excluded.pronunciation, audioUrl=COALESCE(excluded.audioUrl, audioUrl),
+         illustrationUrl=COALESCE(excluded.illustrationUrl, illustrationUrl),
          culturalContext=excluded.culturalContext, category=excluded.category,
          examples=excluded.examples, updatedAt=excluded.updatedAt,
          spanish_norm=excluded.spanish_norm, nasaYuwe_norm=excluded.nasaYuwe_norm`,
@@ -244,6 +245,13 @@ export class SQLiteWordStore implements WordStore {
   async count(): Promise<number> {
     const row = await this.db.getFirstAsync<{ n: number }>(
       "SELECT COUNT(*) AS n FROM words"
+    );
+    return row?.n ?? 0;
+  }
+
+  async countWordsWithAudio(): Promise<number> {
+    const row = await this.db.getFirstAsync<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM words WHERE audioUrl IS NOT NULL AND audioUrl != ''"
     );
     return row?.n ?? 0;
   }

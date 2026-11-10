@@ -16,7 +16,14 @@ export class MemoryWordStore implements WordStore {
   private static readonly LAST_SYNC_KEY = "piiyaak:lastSync";
 
   async upsertWords(rows: WordRow[]): Promise<void> {
-    for (const w of rows) this.words.set(w.id, { ...w });
+    for (const w of rows) {
+      const existing = this.words.get(w.id);
+      this.words.set(w.id, {
+        ...w,
+        audioUrl: w.audioUrl ?? existing?.audioUrl ?? null,
+        illustrationUrl: w.illustrationUrl ?? existing?.illustrationUrl ?? null,
+      });
+    }
   }
 
   async removeWords(ids: string[]): Promise<void> {
@@ -63,6 +70,10 @@ export class MemoryWordStore implements WordStore {
 
   async count(): Promise<number> {
     return this.words.size;
+  }
+
+  async countWordsWithAudio(): Promise<number> {
+    return [...this.words.values()].filter((w) => w.status !== 'DRAFT' && !!w.audioUrl).length;
   }
 
   async getLastSync(): Promise<string | null> {
