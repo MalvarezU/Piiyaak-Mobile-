@@ -108,6 +108,7 @@ export default function Ficha() {
         await player.pause();
         setPlaying(false);
       } else {
+        await player.seekTo(0);
         await player.play();
         setPlaying(true);
       }
@@ -125,7 +126,7 @@ export default function Ficha() {
       await player.play();
       setPlaying(true);
     } catch {
-      // ignore
+      // offline sin caché: no hay audio
     } finally {
       setLoading(false);
     }

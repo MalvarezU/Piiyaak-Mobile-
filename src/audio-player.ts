@@ -10,6 +10,7 @@ export interface AudioPlayer {
   load(uri: string, onFinished?: () => void): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
+  seekTo(seconds: number): Promise<void>;
   unload(): Promise<void>;
 }
 
@@ -17,6 +18,7 @@ export interface AudioPlayer {
 export interface AudioPlayerSound {
   play(): void;
   pause(): void;
+  seekTo(seconds: number): Promise<void>;
   remove(): void;
   addListener(
     event: "playbackStatusUpdate",
@@ -83,6 +85,11 @@ export function createAudioPlayer(
     async pause(): Promise<void> {
       if (!current) return;
       current.pause();
+    },
+
+    async seekTo(seconds: number): Promise<void> {
+      if (!current) return;
+      await current.seekTo(seconds);
     },
 
     async unload(): Promise<void> {

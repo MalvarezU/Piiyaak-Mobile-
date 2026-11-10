@@ -26,6 +26,7 @@ function ListeningPlayer({ url }: { url: string }) {
         await player.pause();
         setPlaying(false);
       } else {
+        await player.seekTo(0);
         await player.play();
         setPlaying(true);
       }

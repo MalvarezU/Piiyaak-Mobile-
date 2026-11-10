@@ -37,10 +37,16 @@ function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
-function resolveAudioUri(audioUrl: string): string | null {
+async function resolveAudioUri(audioUrl: string): Promise<string | null> {
   const mod = AUDIO_ASSETS[audioUrl];
   if (mod == null) return null;
-  return Asset.fromModule(mod).uri ?? null;
+  try {
+    const asset = Asset.fromModule(mod);
+    await asset.downloadAsync();
+    return asset.localUri ?? asset.uri ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export default function Escucha() {
@@ -100,13 +106,9 @@ export default function Escucha() {
 
   const handlePlay = async () => {
     if (!currentWord?.audioUrl || playing) return;
-    const mod = AUDIO_ASSETS[currentWord.audioUrl];
-    if (mod == null) return;
     setPlaying(true);
     try {
-      const asset = Asset.fromModule(mod);
-      await asset.downloadAsync();
-      const uri = resolveAudioUri(currentWord.audioUrl);
+      const uri = await resolveAudioUri(currentWord.audioUrl);
       if (!uri) {
         setPlaying(false);
         return;

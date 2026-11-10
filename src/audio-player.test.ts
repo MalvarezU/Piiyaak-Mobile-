@@ -25,6 +25,7 @@ vi.mock("expo-audio", () => {
       pause() {
         state.paused++;
       },
+      async seekTo() {},
       remove() {
         state.removed++;
       },
@@ -106,6 +107,9 @@ describe("AudioPlayer (B4-02)", () => {
           },
           pause() {
             calls.push("pause");
+          },
+          async seekTo() {
+            calls.push("seek");
           },
           remove() {
             calls.push("unload");
