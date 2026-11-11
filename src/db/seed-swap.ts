@@ -8,6 +8,7 @@
  * exacto se verifica por contrato estático.
  */
 import type { SeedManifest } from "./seed-manifest";
+import { urlCacheFileName } from "./media-cache";
 
 export const SEED_USER_TABLES = ["course_progress", "outbox", "history"] as const;
 export type SeedUserTable = (typeof SEED_USER_TABLES)[number];
@@ -43,6 +44,10 @@ export interface SeedSwapDeps {
   closeLive(): Promise<void>;
   openTemp(tempDbPath: string): Promise<SeedSwapDb>;
   moveFile(from: string, to: string): Promise<void>;
+  /** Copia para el mismo contenido servido por varias URLs (dedup sha). */
+  copyFile(from: string, to: string): Promise<void>;
+  /** Garantiza audios/ e illustrations/ antes de mover (move falla sin dir). */
+  ensureDir(dirUri: string): Promise<void>;
   reopenLive(): Promise<void>;
   adoptVersion(remote: string, serverTime: string): Promise<void>;
   removePath(uri: string): Promise<void>;
@@ -58,14 +63,22 @@ export interface SeedSwapOpts {
   remote: string;
   serverTime: string;
   partUri: string;
+  /**
+   * URLs vigentes de medios (palabras + portadas publicadas), leídas de la
+   * DB nueva durante la verificación. El matching file↔URL es por basename:
+   * permite mover cada archivo con la EXACTA clave `url_<norm>` que
+   * `MediaCache.localUriFor` consulta (nombres por contenido quedaban
+   * aislados: nadie los buscaba).
+   */
+  mediaUrls: ReadonlyArray<{ url: string; kind: "audio" | "illustration" }>;
   /** Hook opcional antes de mover medios (el flujo emite "moviendo medios"). */
   onMediaPhase?: () => void;
 }
 
-function mediaDest(baseDir: string, mimeType: string, localPath: string): string {
-  const fileName = localPath.split("/").pop() ?? localPath;
-  const dir = mimeType.startsWith("audio/") ? "audios/" : "illustrations/";
-  return `${baseDir}${dir}${fileName}`;
+type SeedMediaKind = "audio" | "illustration";
+
+function mediaDestFor(baseDir: string, url: string, kind: SeedMediaKind): string {
+  return `${baseDir}${kind === "audio" ? "audios/" : "illustrations/"}${urlCacheFileName(url, kind)}`;
 }
 
 export async function swapSeedContent(deps: SeedSwapDeps, opts: SeedSwapOpts): Promise<void> {
@@ -119,10 +132,37 @@ export async function swapSeedContent(deps: SeedSwapDeps, opts: SeedSwapOpts): P
       true
     );
   }
-  // 7. Medios por stem sha256 según prefijo de mimeType.
+  // 7. Medios: dirs garantizados + clave EXACTA que MediaCache resuelve
+  // (`url_<url-normalizada>`). Matching file↔URL por basename; el mismo
+  // contenido servido por varias URLs se copia por URL. Sin URL vigente
+  // conocida, el archivo conserva su nombre por contenido (no se pierde).
   opts.onMediaPhase?.();
+  await deps.ensureDir(`${baseDir}audios/`);
+  await deps.ensureDir(`${baseDir}illustrations/`);
+  const urlsByBase = new Map<string, Array<{ url: string; kind: SeedMediaKind }>>();
+  for (const m of opts.mediaUrls) {
+    const base = m.url.split("?")[0]?.split("/").pop()?.toLowerCase() ?? "";
+    if (!base) continue;
+    const list = urlsByBase.get(base) ?? [];
+    list.push({ url: m.url, kind: m.kind });
+    urlsByBase.set(base, list);
+  }
   for (const file of manifest.files) {
-    await deps.moveFile(`${tmpDir}${file.localPath}`, mediaDest(baseDir, file.mimeType, file.localPath));
+    const src = `${tmpDir}${file.localPath}`;
+    const base = (file.objectKey.split("/").pop() ?? "").toLowerCase();
+    const matches = urlsByBase.get(base) ?? [];
+    if (matches.length === 0) {
+      const dir = file.mimeType.startsWith("audio/") ? "audios/" : "illustrations/";
+      const fileName = file.localPath.split("/").pop() ?? `${file.sha256}`;
+      await deps.moveFile(src, `${baseDir}${dir}${fileName}`);
+      continue;
+    }
+    const first = matches[0]!;
+    const dest = mediaDestFor(baseDir, first.url, first.kind);
+    await deps.moveFile(src, dest);
+    for (const m of matches.slice(1)) {
+      await deps.copyFile(dest, mediaDestFor(baseDir, m.url, m.kind));
+    }
   }
   // 8. Limpieza solo tras reapertura + adopción exitosas.
   await deps.removePath(tmpDir);

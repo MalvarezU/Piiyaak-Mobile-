@@ -30,6 +30,20 @@ describe("MemoryWordStore [app]", () => {
     await s.removeWords(["2"]);
     expect(await s.count()).toBe(2);
   });
+
+  it("listWithAudio: query directa por audioUrl, sin depender del corte alfabético", async () => {
+    const s = new MemoryWordStore();
+    await s.upsertWords([
+      w("a1", "abeja", { audioUrl: "https://r2.example/audios/abeja.ogg" }),
+      w("z1", "zorro", { audioUrl: "https://r2.example/audios/zorro.ogg" }),
+      w("m1", "mesa"),
+      w("d1", "dado", { audioUrl: "" }), // vacío = sin audio
+    ]);
+    // zorro ordena al final del alfabeto: con el corte alfabético del
+    // listAZ quedaría fuera; la query directa lo trae igual.
+    expect((await s.listWithAudio(200)).map((r) => r.id)).toEqual(["a1", "z1"]);
+    expect((await s.listWithAudio(1)).map((r) => r.id)).toEqual(["a1"]);
+  });
 });
 
 describe("sync [app]", () => {

@@ -6,7 +6,8 @@ import { useAuth } from "../../../auth";
 import { apiFetch, toAbsoluteUrl } from "../../../api";
 import { theme, spacing, radiusScale, fonts } from "../../../theme";
 import { resolveCachedUri } from "../../../db/media-fs";
-import { resolveAudioUri } from "../../../audio";
+import { resolveAudioUri, resolveBundledAudioUri } from "../../../audio";
+import { resolveBundledIllustrationUri } from "../../../illustrations";
 import type { CourseRow, LessonRow, CourseProgressRow } from "../../../db/course-types";
 import type { CourseStore } from "../../../db/course-store";
 import type { WordRow } from "../../../db/types";
@@ -77,16 +78,24 @@ function CachedLessonImage({
     let alive = true;
     const abs = toAbsoluteUrl(url);
     setSrc(abs);
-    resolveCachedUri({
-      wordId: `lesson:${lessonId}`,
-      kind: "illustration",
-      url: abs,
-      sha256: null,
-    })
-      .then((resolved) => {
-        if (alive) setSrc(resolved);
-      })
-      .catch(() => {});
+    (async () => {
+      // Puente offline primero: si la imagen viaja embebida en la APK
+      // (assets/illustrations, match por basename), no depende de red.
+      const bundled = await resolveBundledIllustrationUri(url);
+      if (alive && bundled) {
+        setSrc(bundled);
+        return;
+      }
+      // Clave de cache con la URL cruda: lessonBlocksToRefs construye el
+      // ref igual (parity con populateMediaCache).
+      const resolved = await resolveCachedUri({
+        wordId: `lesson:${lessonId}`,
+        kind: "illustration",
+        url,
+        sha256: null,
+      });
+      if (alive) setSrc(resolved);
+    })().catch(() => {});
     return () => {
       alive = false;
     };
@@ -109,16 +118,23 @@ function CachedLessonAudio({ lessonId, url }: { lessonId: string; url: string })
     let alive = true;
     const abs = toAbsoluteUrl(url);
     setResolved(abs);
-    resolveCachedUri({
-      wordId: `lesson:${lessonId}`,
-      kind: "audio",
-      url: abs,
-      sha256: null,
-    })
-      .then((r) => {
-        if (alive) setResolved(r);
-      })
-      .catch(() => {});
+    (async () => {
+      // Puente offline primero: el audio del bloque viaja embebido en la
+      // APK (match por sufijo del basename); si no está, cache; remota
+      // como último recurso (online).
+      const bundled = await resolveBundledAudioUri(url);
+      if (alive && bundled) {
+        setResolved(bundled);
+        return;
+      }
+      const r = await resolveCachedUri({
+        wordId: `lesson:${lessonId}`,
+        kind: "audio",
+        url,
+        sha256: null,
+      });
+      if (alive) setResolved(r);
+    })().catch(() => {});
     return () => {
       alive = false;
     };

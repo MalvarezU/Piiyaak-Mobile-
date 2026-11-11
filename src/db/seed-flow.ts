@@ -16,6 +16,8 @@ export interface SeedFlowTempDb {
   integrityCheck(): Promise<string>;
   getKV(key: string): Promise<string | null>;
   count(table: "words" | "courses" | "lessons"): Promise<number>;
+  /** URLs de medios vigentes (palabras + portadas publicadas). */
+  listMediaUrls(): Promise<Array<{ url: string; kind: "audio" | "illustration" }>>;
   attachLive(livePath: string): Promise<void>;
   copyUserTable(table: SeedUserTable): Promise<void>;
   countMain(table: SeedUserTable): Promise<number>;
@@ -40,6 +42,8 @@ export interface SeedFlowDeps {
   reopenLiveDb(): Promise<void>;
   adoptVersion(remote: string, serverTime: string): Promise<void>;
   moveFile(from: string, to: string): Promise<void>;
+  /** Copia para el mismo contenido servido por varias URLs (dedup sha). */
+  copyFile(from: string, to: string): Promise<void>;
   removePath(uri: string): Promise<void>;
   clearDownloadRecord(remote: string): Promise<void>;
 }
@@ -83,6 +87,8 @@ export async function runSeedFlow(deps: SeedFlowDeps, opts: SeedFlowOpts): Promi
       closeLive: deps.closeLiveDb,
       openTemp: async () => temp,
       moveFile: deps.moveFile,
+      copyFile: deps.copyFile,
+      ensureDir: deps.ensureDir,
       reopenLive: deps.reopenLiveDb,
       adoptVersion: deps.adoptVersion,
       removePath: deps.removePath,
@@ -97,6 +103,7 @@ export async function runSeedFlow(deps: SeedFlowDeps, opts: SeedFlowOpts): Promi
       remote,
       serverTime,
       partUri: zipUri,
+      mediaUrls: await temp.listMediaUrls(),
       onMediaPhase: () => emit({ type: "INSTALL", phase: "moviendo medios" }),
     }
   );

@@ -37,13 +37,16 @@ export default function Escucha() {
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
+    useEffect(() => {
     let alive = true;
     (async () => {
       if (!store) return;
-      const all = await store.listAZ(null, 200, 0);
+      // Pool directo por audioUrl (query dedicada): nunca depende del
+      // corte alfabético del listAZ, que dejaba el juego sin rondas
+      // cuando las palabras con audio ordenaban tarde.
+      const all = await store.listWithAudio(200);
       if (!alive) return;
-      const pool = shuffle((all as WordRow[]).filter((w) => !!w.audioUrl));
+      const pool = shuffle(all as WordRow[]);
       const chosen = pool.slice(0, MAX_ROUNDS);
       if (alive) {
         setRounds(chosen);

@@ -65,6 +65,24 @@ function toTempDb(db: SQLiteDatabase): SeedFlowTempDb {
       const row = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`);
       return row?.n ?? 0;
     },
+    async listMediaUrls() {
+      const words = await db.getAllAsync<{
+        audioUrl: string | null;
+        illustrationUrl: string | null;
+      }>("SELECT audioUrl, illustrationUrl FROM words");
+      const out: Array<{ url: string; kind: "audio" | "illustration" }> = [];
+      for (const w of words) {
+        if (w.audioUrl) out.push({ url: w.audioUrl, kind: "audio" });
+        if (w.illustrationUrl) out.push({ url: w.illustrationUrl, kind: "illustration" });
+      }
+      const covers = await db.getAllAsync<{ coverImage: string | null }>(
+        "SELECT coverImage FROM courses WHERE status = 'PUBLISHED' AND coverImage IS NOT NULL"
+      );
+      for (const c of covers) {
+        if (c.coverImage) out.push({ url: c.coverImage, kind: "illustration" });
+      }
+      return out;
+    },
     async attachLive(livePath: string) {
       const raw = stripFileScheme(livePath).replace(/'/g, "''");
       await db.execAsync(`ATTACH DATABASE '${raw}' AS live;`);
@@ -244,6 +262,9 @@ export function buildExpoSeedDeps(host: ExpoSeedHost, documentDir: string): Seed
     adoptVersion: (remote, serverTime) => host.adoptVersion(remote, serverTime),
     async moveFile(from: string, to: string) {
       await FileSystem.moveAsync({ from, to });
+    },
+    async copyFile(from: string, to: string) {
+      await FileSystem.copyAsync({ from, to });
     },
     async removePath(uri: string) {
       await FileSystem.deleteAsync(uri, { idempotent: true });

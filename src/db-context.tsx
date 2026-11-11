@@ -236,6 +236,9 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       // Primera instalación: si hay una BD pre-poblada en el bundle (assets/piiyaak.db),
       // copiarla antes de abrir, para tener el diccionario offline desde el primer arranque.
+      // Defensa (v1.2): una BD viva VACÍA o corrupta (0 palabras / sin tabla words)
+      // no sobrevive al contenido embebido — se reinstala desde el bundle. Una BD
+      // con datos NUNCA se toca (progreso local).
       try {
         const asset = Asset.fromModule(require("../assets/piiyaak.db"));
         await asset.downloadAsync();
@@ -246,6 +249,22 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
           const info = await FileSystem.getInfoAsync(dbPath);
           if (!info.exists) {
             await FileSystem.copyAsync({ from: asset.localUri, to: dbPath });
+          } else {
+            const probe = openDatabaseSync("piiyaak.db");
+            let needsReseed = false;
+            try {
+              const row = await probe.getFirstAsync<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM words"
+              );
+              needsReseed = !row || row.n === 0;
+            } catch {
+              needsReseed = true; // sin tabla words o DB ilegible
+            }
+            await probe.closeAsync();
+            if (needsReseed) {
+              await FileSystem.deleteAsync(dbPath, { idempotent: true });
+              await FileSystem.copyAsync({ from: asset.localUri, to: dbPath });
+            }
           }
         }
       } catch {

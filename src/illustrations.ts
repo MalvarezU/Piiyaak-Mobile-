@@ -5,7 +5,7 @@ import type { MediaRef } from "./db/media-cache";
 
 import { BUNDLED_ILLUSTRATIONS } from "./bundled-media.generated";
 
-async function resolveBundledIllustrationUri(url: string): Promise<string | null> {
+export async function resolveBundledIllustrationUri(url: string): Promise<string | null> {
   let mod = BUNDLED_ILLUSTRATIONS[url];
   if (mod === undefined) {
     // Puente offline: el servidor ya sirve URLs R2 absolutas con nombres

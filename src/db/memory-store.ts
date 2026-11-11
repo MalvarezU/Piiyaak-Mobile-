@@ -76,6 +76,14 @@ export class MemoryWordStore implements WordStore {
     return [...this.words.values()].filter((w) => w.status !== 'DRAFT' && !!w.audioUrl).length;
   }
 
+  /** Paridad con SQLiteWordStore.listWithAudio: query directa por audioUrl. */
+  async listWithAudio(limit = 200): Promise<WordRow[]> {
+    return [...this.words.values()]
+      .filter((w) => w.status !== 'DRAFT' && !!w.audioUrl && w.audioUrl !== "")
+      .sort((a, b) => a.spanish.localeCompare(b.spanish, "es"))
+      .slice(0, limit);
+  }
+
   async getLastSync(): Promise<string | null> {
     return this.kv.get(MemoryWordStore.LAST_SYNC_KEY) ?? null;
   }

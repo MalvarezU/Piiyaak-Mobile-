@@ -6,6 +6,7 @@ import { useDb } from "../../db-context";
 import { useAuth, AUTH_UI_ENABLED } from "../../auth";
 import { syncCourses, flushCourseProgress } from "../../db/sync-courses";
 import { resolveCachedUri } from "../../db/media-fs";
+import { resolveBundledIllustrationUri } from "../../illustrations";
 import { toAbsoluteUrl } from "../../api";
 import { EmptyState } from "../../components/empty-state";
 import { Screen, ThemedText, Card, Button, Chip } from "../../components/ui";
@@ -23,16 +24,25 @@ function CourseCover({ courseId, uri }: { courseId: string; uri: string }) {
     let alive = true;
     const abs = toAbsoluteUrl(uri);
     setSrc(abs);
-    resolveCachedUri({
-      wordId: `course:${courseId}`,
-      kind: "illustration",
-      url: uri,
-      sha256: null,
-    })
-      .then((resolved) => {
-        if (alive) setSrc(resolved);
-      })
-      .catch(() => {});
+    (async () => {
+      // Puente offline primero: la portada viaja embebida en la APK
+      // (assets/illustrations, match por basename case-insensitive); si
+      // no está, cache por URL; remota como último recurso (online).
+      const bundled = await resolveBundledIllustrationUri(uri);
+      if (alive && bundled) {
+        setSrc(bundled);
+        return;
+      }
+      // Clave de cache con la URL cruda: courseCoversToRefs construye el
+      // ref igual (parity con populateMediaCache).
+      const resolved = await resolveCachedUri({
+        wordId: `course:${courseId}`,
+        kind: "illustration",
+        url: uri,
+        sha256: null,
+      });
+      if (alive) setSrc(resolved);
+    })().catch(() => {});
     return () => {
       alive = false;
     };

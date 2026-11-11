@@ -57,6 +57,9 @@ function fakeTempDb(overrides: Partial<SeedFlowTempDb> = {}): SeedFlowTempDb {
       if (table === "words") return 1;
       return 0;
     },
+    async listMediaUrls() {
+      return [];
+    },
     async attachLive() {},
     async copyUserTable() {},
     async countMain() {
@@ -108,6 +111,9 @@ function fakeDeps(overrides: {
   });
   const moveFile = vi.fn(async (from: string, to: string) => {
     calls.push(`move:${from}→${to}`);
+  });
+  const copyFile = vi.fn(async (from: string, to: string) => {
+    calls.push(`copy:${from}→${to}`);
   });
   const deps: SeedFlowDeps = {
     tmpDir: "file:///tmp/",
@@ -161,6 +167,7 @@ function fakeDeps(overrides: {
     reopenLiveDb,
     adoptVersion,
     moveFile,
+    copyFile,
     async removePath(uri: string) {
       calls.push(`remove:${uri}`);
     },

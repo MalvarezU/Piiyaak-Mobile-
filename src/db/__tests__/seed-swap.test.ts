@@ -59,6 +59,7 @@ const OPTS = {
   remote: "41",
   serverTime: "2026-01-01T00:00:00.000Z",
   partUri: "file:///tmp/seed-41.zip.part",
+  mediaUrls: [] as ReadonlyArray<{ url: string; kind: "audio" | "illustration" }>,
 };
 
 function fakeDb(overrides: Partial<SeedSwapDb> = {}): SeedSwapDb & {
@@ -102,14 +103,17 @@ function fakeDb(overrides: Partial<SeedSwapDb> = {}): SeedSwapDb & {
 function fakeDeps(db: SeedSwapDb, overrides: Partial<SeedSwapDeps> = {}): SeedSwapDeps & {
   calls: string[];
   moves: Array<[string, string]>;
+  copies: Array<[string, string]>;
   removed: string[];
 } {
   const calls: string[] = [];
   const moves: Array<[string, string]> = [];
+  const copies: Array<[string, string]> = [];
   const removed: string[] = [];
   return {
     calls,
     moves,
+    copies,
     removed,
     async closeLive() {
       calls.push("closeLive");
@@ -121,6 +125,13 @@ function fakeDeps(db: SeedSwapDb, overrides: Partial<SeedSwapDeps> = {}): SeedSw
     async moveFile(from: string, to: string) {
       calls.push(`move:${from}→${to}`);
       moves.push([from, to]);
+    },
+    async copyFile(from: string, to: string) {
+      calls.push(`copy:${from}→${to}`);
+      copies.push([from, to]);
+    },
+    async ensureDir(dirUri: string) {
+      calls.push(`ensureDir:${dirUri}`);
     },
     async reopenLive() {
       calls.push("reopen");
@@ -194,7 +205,7 @@ describe("swapSeedContent", () => {
     ]);
   });
 
-  it("mueve medios por stem sha256 a audios/ o illustrations/ según mimeType", async () => {
+  it("sin URLs vigentes conserva el nombre por contenido (no se pierde)", async () => {
     const db = fakeDb();
     const deps = fakeDeps(db);
     await swapSeedContent(deps, OPTS);
@@ -205,6 +216,45 @@ describe("swapSeedContent", () => {
     expect(deps.moves).toContainEqual([
       `file:///tmp/seed-41/media/${FILE_B}.png`,
       `file:///doc/illustrations/${FILE_B}.png`,
+    ]);
+  });
+
+  it("mueve medios con la clave url_<norm> que MediaCache resuelve y garantiza dirs", async () => {
+    const db = fakeDb();
+    const deps = fakeDeps(db);
+    await swapSeedContent(deps, {
+      ...OPTS,
+      mediaUrls: [
+        { url: "https://cdn.example.com/audios/temp/x/a.mp3", kind: "audio" },
+      ],
+    });
+    expect(deps.calls).toContain("ensureDir:file:///doc/audios/");
+    expect(deps.calls).toContain("ensureDir:file:///doc/illustrations/");
+    expect(deps.moves).toContainEqual([
+      `file:///tmp/seed-41/media/${FILE_A}.mp3`,
+      "file:///doc/audios/url_https___cdn_example_com_audios_temp_x_a_mp3.mp3",
+    ]);
+  });
+
+  it("el mismo contenido servido por varias URLs se copia por URL (move + copies)", async () => {
+    const db = fakeDb();
+    const deps = fakeDeps(db);
+    await swapSeedContent(deps, {
+      ...OPTS,
+      mediaUrls: [
+        { url: "https://cdn.example.com/uno/a.mp3", kind: "audio" },
+        { url: "https://cdn.example.com/dos/a.mp3", kind: "audio" },
+      ],
+    });
+    expect(deps.moves).toContainEqual([
+      `file:///tmp/seed-41/media/${FILE_A}.mp3`,
+      "file:///doc/audios/url_https___cdn_example_com_uno_a_mp3.mp3",
+    ]);
+    expect(deps.copies).toEqual([
+      [
+        "file:///doc/audios/url_https___cdn_example_com_uno_a_mp3.mp3",
+        "file:///doc/audios/url_https___cdn_example_com_dos_a_mp3.mp3",
+      ],
     ]);
   });
 

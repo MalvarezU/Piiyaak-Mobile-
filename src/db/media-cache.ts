@@ -115,11 +115,22 @@ export function normalizeUrlKey(url: string): string {
 }
 
 function fileNameFor(ref: MediaRef): string {
-  const ext = extFromUrl(ref.url, ref.kind === "audio" ? "mp3" : "png");
   if (ref.sha256 && HASH64.test(ref.sha256)) {
+    const ext = extFromUrl(ref.url, ref.kind === "audio" ? "mp3" : "png");
     return `${ref.sha256.toLowerCase()}.${ext}`;
   }
-  return `url_${normalizeUrlKey(ref.url)}.${ext}`;
+  return urlCacheFileName(ref.url, ref.kind);
+}
+
+/**
+ * Nombre de archivo del cache para una URL sin `sha256` conocido (modo
+ * F1-b): clave por URL normalizada. Exportado para que el seed-swap
+ * mueva los medios del zip con EXACTAMENTE la clave que `localUriFor`
+ * consulta — con nombres por contenido el cache nunca los encontraba.
+ */
+export function urlCacheFileName(url: string, kind: MediaKind): string {
+  const ext = extFromUrl(url, kind === "audio" ? "mp3" : "png");
+  return `url_${normalizeUrlKey(url)}.${ext}`;
 }
 
 export interface MediaCacheOptions {

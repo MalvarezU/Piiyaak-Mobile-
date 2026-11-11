@@ -106,6 +106,8 @@ export interface WordStore {
   getById(id: string): Promise<WordRow | null>;
   count(): Promise<number>;
   countWordsWithAudio(): Promise<number>;
+  /** Palabras con audio publicado (juegos de escucha): query directa. */
+  listWithAudio(limit?: number): Promise<WordRow[]>;
   getLastSync(): Promise<string | null>;
   setLastSync(iso: string): Promise<void>;
   getKV(key: string): Promise<string | null>;
@@ -254,6 +256,18 @@ export class SQLiteWordStore implements WordStore {
       "SELECT COUNT(*) AS n FROM words WHERE audioUrl IS NOT NULL AND audioUrl != ''"
     );
     return row?.n ?? 0;
+  }
+
+  /**
+   * Pool de los juegos de escucha: query directa por `audioUrl`,
+   * independiente del orden alfabético de `listAZ` (el corte a 200
+   * alfabéticas podía dejar el pool vacío aunque hubiera audios).
+   */
+  async listWithAudio(limit = 200): Promise<WordRow[]> {
+    return this.db.getAllAsync<WordRow>(
+      "SELECT * FROM words WHERE audioUrl IS NOT NULL AND audioUrl != '' AND (status IS NULL OR status != 'DRAFT') ORDER BY spanish LIMIT ?",
+      [limit]
+    );
   }
 
   async getLastSync(): Promise<string | null> {
