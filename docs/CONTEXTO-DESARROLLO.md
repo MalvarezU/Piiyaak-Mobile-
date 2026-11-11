@@ -80,7 +80,10 @@ Logo Piiyaak en header (`logo-white.png`) + tile Diccionario (`logo.png`), app i
 6. **SW residual**: el error `Failed to convert value to 'Response'` en `/admin/palabras` (bypass `.apk` ya aplicado; si persiste, revisar el handler del SW en `/admin`).
 7. **Aviso de nueva versión** en la app (consultar `apk/latest.json` al arrancar).
 8. **Maestro E2E** (`.maestro/*.yaml` ya creados; requieren un runner).
-9. **⚠️ Backlog WEB (pedido del dueño, 2026-11-11)**: (a) los juegos de audios de la WEB siempre muestran las mismas palabras — revisar la selección (probable selección determinista de primeras N en vez de aleatoria); (b) agregar **modo infinito** a los juegos: durar hasta agotar los intentos del jugador (sistema de vidas) — **definir con el dueño cuántos intentos/vidas** antes de terminar.
+9. **⚠️ Backlog JUEGOS (actualizado 2026-11-11, sesión v1.3)**:
+   - ✅ **FIXED app**: pools de `flashcards`/`relacionar`/`ordena`/`completar` usaban `listAZ(null,50,0)` (siempre las primeras 50 alfabéticas de 357) → ahora `listRandom(50)` (muestreo aleatorio total). Escucha app: revelado con palabra Nasa Yuwe + pronunciación + reescuchar al responder, re-baraja al reintentar y distractores del pool completo.
+   - ✅ **FIXED web**: `/api/games/words` ya era aleatoria pero el muestreo chico (12 de ~31 audios) daba enorme solapamiento → helpers de `game-words.ts` ahora **excluyen palabras servidas recientemente** (ring buffer `piiyaak:game:v1:recent`, cap 24, compartido entre juegos) y Escucha muestrea 16; si el pool filtrado queda <4 reintenta sin exclusión. El revelado web de Escucha ya existía (verificar en prod).
+   - ⏳ **PENDIENTE (dueño: "para más adelante")**: modo infinito con vidas en los juegos — **definir cuántos intentos/vidas** antes de terminar (preguntado el 2026-11-11; aún sin respuesta).
 
 ---
 
@@ -158,6 +161,14 @@ Faltan en móvil: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASS
 
 **Build de prueba**: versionCode **2** / versionName **1.2** (`-PversionCode=2 -PversionName=1.2`), firma release local (SHA256 `11757597cbaede64…`). Deploy a R2 recién tras la validación del dueño en dispositivo.
 ⚠️ **Trap firma local**: `keystore.env` asigna las vars SIN `export` → sourcearlo simple deja al `gradlew` (proceso hijo) sin verlas y el build **sale debug-signed sin error** (`CN=Android Debug`). Usar `set -a && source ~/.piiyaak/keys/keystore.env && set +a` y verificar SIEMPRE con `apksigner verify --print-certs` (tools: `$ANDROID_HOME/build-tools/36.0.0/`).
+
+## Fixes v1.3 (2026-11-11, misma sesión) — Ajustes + variedad de juegos
+
+Validado v1.2 en dispositivo por el dueño ("todo bien") → merge a `origin/main` y sesión de mejoras:
+1. **Ajustes**: vista de sincronización rediseñada con kit Fase 2 (Card/ThemedText/Button/Chip + lucide); feedback explícito de éxito/error (el sync fallido era silencioso); palabras locales/versión de contenido siempre visibles; barra de progreso; "Sincronizar datos" renombrado a "Enviar cambios pendientes (N)" y visible solo con outbox > 0.
+2. **Juegos app**: `WordStore.listRandom` (muestreo `ORDER BY RANDOM()` desde TODO el diccionario) reemplaza el cap `listAZ(null,50,0)` en flashcards/relacionar/ordena/completar; Escucha con tarjeta de revelado (nasaYuwe + pronunciación + reescuchar), re-baraja al reintentar (`gameKey`) y audio por cache→heredado→bundled→remota (`resolveAudioUri`).
+3. **Juegos web**: exclusión de palabras servidas recientemente en `game-words.ts` (ring buffer compartido + `exclude=` + retry sin exclusión si <4); Escucha muestrea 16. Tests: `game-words.test.ts` con 3 casos nuevos de variedad.
+4. Pendiente para el dueño: probar v1.3 en dispositivo; modo infinito con vidas queda para más adelante.
 
 ## Estructura de scripts (móvil)
 - `scripts/generate-bundled-media-map.ts` → `src/bundled-media.generated.ts` (require() de assets/audios + illustrations).
