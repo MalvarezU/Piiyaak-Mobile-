@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { Volume2 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
@@ -40,6 +40,11 @@ export default function Escucha() {
   const [done, setDone] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
+  // Orientación: en horizontal hay más alto útil; se usa para compactar
+  // (opciones en grilla 2x2 y revelado lateral) y que validar nunca
+  // requiera scroll.
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
 
     useEffect(() => {
     let alive = true;
@@ -189,9 +194,135 @@ export default function Escucha() {
 
   const correctSpanish = currentWord.spanish;
 
+  const optionButtons = options.map((opt, idx) => {
+    const isCorrect = opt === correctSpanish;
+    const isSelected = opt === selected;
+    let bg: string = theme.card;
+    let borderColor: string = theme.border;
+    if (selected !== null) {
+      if (isCorrect) {
+        bg = theme.successSoft;
+        borderColor = theme.success;
+      } else if (isSelected) {
+        bg = theme.dangerSoft;
+        borderColor = theme.danger;
+      }
+    }
+    return (
+      <Button
+        key={`${opt}-${idx}`}
+        title={opt}
+        variant="secondary"
+        disabled={selected !== null}
+        onPress={() => handleSelect(opt)}
+        style={[
+          styles.optionBtn,
+          isLandscape && styles.optionBtnLandscape,
+          { backgroundColor: bg, borderColor },
+          selected !== null ? { opacity: 1 } : null,
+        ]}
+      />
+    );
+  });
+
+  // Slot reservado: siempre montado con altura fija. Al responder solo
+  // rellena el espacio en vez de crecer la página → validar nunca
+  // requiere scroll (misma técnica que la web con min-h-28).
+  const revealSlot = (
+    <View style={styles.revealSlot}>
+      {feedback ? (
+        <>
+          <ThemedText
+            variant="bodyStrong"
+            style={[
+              styles.feedback,
+              { color: feedback === "correct" ? theme.success : theme.danger },
+            ]}
+          >
+            {feedback === "correct" ? "✓ Correcto" : "✗ Incorrecto"}
+          </ThemedText>
+          {/* Revelado pedagógico: la palabra escuchada, cómo se escribe
+              y su pronunciación (antes solo coloreaba la opción). */}
+          <Card style={styles.reveal}>
+            <ThemedText variant="caption">
+              La palabra en Nasa Yuwe:
+            </ThemedText>
+            <ThemedText variant="heading" style={styles.revealWord}>
+              {currentWord.nasaYuwe}
+            </ThemedText>
+            {currentWord.pronunciation ? (
+              <ThemedText variant="caption" style={styles.revealPron}>
+                [{currentWord.pronunciation}]
+              </ThemedText>
+            ) : null}
+            <Button
+              title="Escuchar de nuevo"
+              variant="ghost"
+              icon={<Volume2 size={16} color={theme.primary} />}
+              onPress={handlePlay}
+              style={styles.revealBtn}
+            />
+          </Card>
+        </>
+      ) : (
+        <ThemedText variant="caption" style={styles.revealPlaceholder}>
+          ···
+        </ThemedText>
+      )}
+    </View>
+  );
+
+  // Siguiente también con slot fijo: no empuja al aparecer.
+  const nextSlot = (
+    <View style={styles.nextSlot}>
+      {selected !== null ? (
+        <Button
+          title="Siguiente"
+          variant="primary"
+          onPress={handleNext}
+          style={styles.nextBtn}
+        />
+      ) : null}
+    </View>
+  );
+
+  // En horizontal hay más alto útil: opciones en grilla 2x2 a la
+  // izquierda y revelado+Siguiente a la derecha.
+  if (isLandscape) {
+    return (
+      <Screen>
+        <View style={styles.content}>
+          <View style={styles.statusRow}>
+            <ThemedText variant="title">Escucha</ThemedText>
+            <ThemedText variant="caption">
+              Ronda {roundIndex + 1} / {rounds.length} · Aciertos: {score}
+            </ThemedText>
+          </View>
+          <View style={styles.landscapeRow}>
+            <View style={styles.landscapeCol}>
+              <Button
+                title={playing ? "Reproduciendo..." : "Reproducir audio"}
+                variant="primary"
+                icon={<Volume2 size={20} color={theme.onTint} />}
+                disabled={playing}
+                onPress={handlePlay}
+                style={styles.audioBtn}
+              />
+              <View style={styles.optionsLandscape}>{optionButtons}</View>
+            </View>
+            <View style={styles.landscapeCol}>
+              {revealSlot}
+              {nextSlot}
+            </View>
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.content}>
         <View style={styles.header}>
           <ThemedText variant="title">Escucha</ThemedText>
           <ThemedText variant="caption" style={styles.subtitle}>
@@ -215,93 +346,33 @@ export default function Escucha() {
           style={styles.audioBtn}
         />
 
-        <View style={styles.options}>
-          {options.map((opt, idx) => {
-            const isCorrect = opt === correctSpanish;
-            const isSelected = opt === selected;
-            let bg: string = theme.card;
-            let borderColor: string = theme.border;
-            if (selected !== null) {
-              if (isCorrect) {
-                bg = theme.successSoft;
-                borderColor = theme.success;
-              } else if (isSelected) {
-                bg = theme.dangerSoft;
-                borderColor = theme.danger;
-              }
-            }
-            return (
-              <Button
-                key={`${opt}-${idx}`}
-                title={opt}
-                variant="secondary"
-                disabled={selected !== null}
-                onPress={() => handleSelect(opt)}
-                style={[
-                  styles.optionBtn,
-                  { backgroundColor: bg, borderColor },
-                  selected !== null ? { opacity: 1 } : null,
-                ]}
-              />
-            );
-          })}
-        </View>
+        <View style={styles.options}>{optionButtons}</View>
 
-        {feedback ? (
-          <>
-            <ThemedText
-              variant="bodyStrong"
-              style={[
-                styles.feedback,
-                { color: feedback === "correct" ? theme.success : theme.danger },
-              ]}
-            >
-              {feedback === "correct" ? "✓ Correcto" : "✗ Incorrecto"}
-            </ThemedText>
-            {/* Revelado pedagógico: la palabra escuchada, cómo se escribe
-                y su pronunciación (antes solo coloreaba la opción). */}
-            <Card style={styles.reveal}>
-              <ThemedText variant="caption">
-                La palabra en Nasa Yuwe:
-              </ThemedText>
-              <ThemedText variant="heading" style={styles.revealWord}>
-                {currentWord.nasaYuwe}
-              </ThemedText>
-              {currentWord.pronunciation ? (
-                <ThemedText variant="caption" style={styles.revealPron}>
-                  [{currentWord.pronunciation}]
-                </ThemedText>
-              ) : null}
-              <Button
-                title="Escuchar de nuevo"
-                variant="ghost"
-                icon={<Volume2 size={16} color={theme.primary} />}
-                onPress={handlePlay}
-                style={styles.revealBtn}
-              />
-            </Card>
-          </>
-        ) : null}
-
-        {selected !== null ? (
-          <Button
-            title="Siguiente"
-            variant="primary"
-            onPress={handleNext}
-            style={styles.nextBtn}
-          />
-        ) : null}
-      </ScrollView>
+        {revealSlot}
+        {nextSlot}
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  // Sin ScrollView: el contenido entra en pantalla y validar solo
+  // rellena slots reservados → nunca aparece scroll.
   content: {
-    gap: spacing.md,
+    flex: 1,
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  landscapeRow: {
+    flex: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  landscapeCol: {
+    flex: 1,
+    gap: spacing.sm,
   },
   header: { gap: spacing.xs },
   subtitle: { color: theme.muted },
@@ -318,20 +389,46 @@ const styles = StyleSheet.create({
   options: {
     gap: spacing.sm,
   },
+  optionsLandscape: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
   optionBtn: {
     alignSelf: "stretch",
     minHeight: minHit,
   },
+  optionBtnLandscape: {
+    width: "48%",
+    flexGrow: 1,
+  },
   feedback: {
     textAlign: "center",
+  },
+  // Altura reservada desde el inicio (placeholder ···): el revelado
+  // no empuja el layout al aparecer.
+  revealSlot: {
+    minHeight: 148,
+    justifyContent: "center",
+  },
+  revealPlaceholder: {
+    textAlign: "center",
+    color: theme.muted,
+    opacity: 0,
   },
   reveal: {
     gap: spacing.xs,
     alignItems: "center",
+    paddingVertical: spacing.sm,
   },
   revealWord: { textAlign: "center" },
   revealPron: { textAlign: "center", color: theme.muted },
   revealBtn: { marginTop: spacing.xs },
+  // Slot fijo para Siguiente: aparece sin empujar.
+  nextSlot: {
+    height: 52,
+    justifyContent: "center",
+  },
   nextBtn: {
     alignSelf: "stretch",
   },

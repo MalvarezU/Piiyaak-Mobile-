@@ -168,7 +168,10 @@ Validado v1.2 en dispositivo por el dueño ("todo bien") → merge a `origin/mai
 1. **Ajustes**: vista de sincronización rediseñada con kit Fase 2 (Card/ThemedText/Button/Chip + lucide); feedback explícito de éxito/error (el sync fallido era silencioso); palabras locales/versión de contenido siempre visibles; barra de progreso; "Sincronizar datos" renombrado a "Enviar cambios pendientes (N)" y visible solo con outbox > 0.
 2. **Juegos app**: `WordStore.listRandom` (muestreo `ORDER BY RANDOM()` desde TODO el diccionario) reemplaza el cap `listAZ(null,50,0)` en flashcards/relacionar/ordena/completar; Escucha con tarjeta de revelado (nasaYuwe + pronunciación + reescuchar), re-baraja al reintentar (`gameKey`) y audio por cache→heredado→bundled→remota (`resolveAudioUri`).
 3. **Juegos web**: exclusión de palabras servidas recientemente en `game-words.ts` (ring buffer compartido + `exclude=` + retry sin exclusión si <4); Escucha muestrea 16. Tests: `game-words.test.ts` con 3 casos nuevos de variedad.
-4. Pendiente para el dueño: probar v1.3 en dispositivo; modo infinito con vidas queda para más adelante.
+4. **Escucha app sin scroll**: se elimina el `ScrollView`; la pantalla es un `View` con slots de altura reservada para revelado (`revealSlot`, minHeight 148 con placeholder `···`) y Siguiente (`nextSlot`, 52). En horizontal (`useWindowDimensions`, `width > height`) el layout se parte en dos columnas: audio+opciones en grilla 2x2 a la izquierda, revelado+Siguiente a la derecha. Gaps compactados (`sm`).
+5. Pendiente para el dueño: probar v1.3 en dispositivo; modo infinito con vidas queda para más adelante.
+
+> **Nota web preexistente (2026-11-11, para después)**: la suite web completa da `11 files failed / 187 passed` (8 tests fallidos) — todos en `tests/fase-a/*` (sync/tombstones) por `PrismaClientInitializationError: Can't reach database server at localhost:3307` (MySQL de test apagado). **No los rompen los cambios de juegos**: `game-words.test.ts` 13/13 y `escucha-game.test.tsx` 11/11 pasan. Requieren levantar la DB (`localhost:3307 piiyaak_test`) y re-correr.
 
 ## Estructura de scripts (móvil)
 - `scripts/generate-bundled-media-map.ts` → `src/bundled-media.generated.ts` (require() de assets/audios + illustrations).
