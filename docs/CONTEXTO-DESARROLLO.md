@@ -1,0 +1,158 @@
+# Contexto de desarrollo — Piiyaak (backend + app móvil)
+
+> Generado el 2026-11-11 tras la sesión Fase 2 + Fase 3 + migración SDK 55 + pipelines Cloudflare/R2.
+> Esta es la referencia para continuar el proyecto en una sesión nueva.
+
+---
+
+## Repositorios
+
+| Repo | URL | Rol |
+|---|---|---|
+| **DiccionarioNasa** | github.com/MalvarezU/DiccionarioNasa | Backend web (Next 16 + MariaDB + Prisma) + admin panel + pipelines |
+| **Piiyaak-Mobile-** | github.com/MalvarezU/Piiyaak-Mobile- | App Expo SDK 55 (RN 0.83, React 19.2) |
+
+**Producción:** `https://piiyaak.com` (backend Node en Hostinger + MariaDB). DB prod: `u357487330_piiyaakDB` (contentVersion **67**).
+
+---
+
+## Ramas y worktrees
+
+### Backend (DiccionarioNasa)
+| Rama | Estado |
+|---|---|
+| `main` | **Rama principal.** Actual: `fbf6083` (zod→dependencies). Incluye PR #5 (fase-a/b/c/d) + PR #6 (fix descarga + SW) |
+| `develop` | Rama de desarrollo, sincronizada con main |
+| `chore/hostinger-deploy-setup` | Work branch del deploy (Hostinger + workflows). Mergeada vía PR #5/#6 |
+| `feat/etapa1-content-version`, `feat/f1a-sha256-sync`, `feat/fase-d-auto`, `feat/fase-c-seed`, `feat/fase-b-endpoints` | Ramas de fases (ya mergeadas) |
+| `fase-a/pr1..pr3` | PRs cerrados (mergeados manualmente con resolución de conflictos) |
+| `origin/develop` | Era la default; ahora `main` es la default (cambiado) |
+
+**Worktrees backend:**
+- `/home/mario/Escritorio/Proyectos/pyajte/Diccionario nasa` → `main` (ruta con espacio al final)
+- `/home/mario/Escritorio/Proyectos/Diccionario-endpoints` → `feat/fase-d-auto`
+- `/home/mario/Escritorio/Proyectos/Diccionario-etapa1` → `feat/etapa1-content-version`
+- `/home/mario/Escritorio/Proyectos/Diccionario-f1a` → `feat/f1a-sha256-sync`
+- `/home/mario/Escritorio/Proyectos/piiyaak-deploy` → `chore/hostinger-deploy-setup`
+
+### Móvil (Piiyaak-Mobile-)
+| Rama | Estado |
+|---|---|
+| `main` | Actual: `fd5c1f9` (workflow APK + scripts) |
+| `feat/juegos`, `feat/mobile-consumo-completo`, `feat/mobile-fase-c`, `feat/mobile-fase-d`, `feat/mobile-offline-fase-b`, `feat/mobile-paridad-web` | Ramas de fases previas |
+| `chore/limpieza-hostinger` | Limpieza |
+
+---
+
+## Fases completadas
+
+### Fase 2 — Rediseño visual (app)
+Kit UI (`src/components/ui/`: ThemedText, Card, Button, Chip, Screen) + Home (WOD card, módulos, búsqueda) + Ficha (dictionary card) + Explorar A-Z (letter headers) + Hub Juegos (lucide tiles). View-only, tokens de `src/theme.ts`.
+
+### Fase 3 — Juegos + juice kit (app)
+- **Relaciona**: two-column matching (palabras visibles, tap para unir). Reemplazó al juego "Memoria" (borrado).
+- **Escucha**: audio + 4 opciones múltiples. 11 audios + 4 ilustraciones embebidas en el APK.
+- **Completar**: pista de letras (35% ocultas).
+- **Ordena**: texto visible, tiles centrados.
+- **Juice kit**: `src/components/motion/` (Reveal, Pulse, Stagger) con Reanimated; consumido en Home/Explorar.
+- **Cursos**: portada (ResumeBand, featured, search) + detalle (progress bar) + lección (evaluación: quiz interactivo, listening, word cards, video notice).
+
+### SDK migration 52 → 55
+`expo@55`, RN 0.83, React 19.2, Reanimated 4.2, `expo-av` → `expo-audio`, `expo-file-system` → `expo-file-system/legacy`, tests 235/235 verdes.
+
+### Branding
+Logo Piiyaak en header (`logo-white.png`) + tile Diccionario (`logo.png`), app icon = logo, login UI oculto tras `AUTH_UI_ENABLED=false`.
+
+### Pipelines (backend)
+- **`seed-content.yml`**: genera `seed/<N>/manifest.json` + `piiyaak-seed.zip` → R2. Disparadores: manual + **domingos 07:00 UTC (02:00 Colombia)**.
+- **`apk-release.yml`** (repo móvil): descarga el seed, embebe DB+medios, compila APK, sube a R2 (`apk/<vc>/` + `apk/latest.json`). Disparadores: manual + **domingos 09:00 UTC (04:00 Colombia)**.
+- **`deploy-hostinger.yml`**: build en runner → tar → SCP → restart. Disparador: manual (9 secrets).
+
+---
+
+## Pendientes (orden sugerido)
+
+1. **`.env` de prod**: pegar `SEED_DISPATCH_TOKEN`, `SEED_GITHUB_OWNER/REPO`, `APK_DISPATCH_TOKEN`, `APK_GITHUB_OWNER/REPO` + confirmar `CI_SYNC_SECRET` y `R2_*`. Sin esto los 500 del admin persisten.
+2. **Keystore de firma** (app): generar con `keytool -genkeypair ...`, base64 → secret `KEYSTORE_BASE64` + `KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD` en `Piiyaak-Mobile-`. Sin esto la APK sale debug-firmada.
+3. **Primer seed real**: con prod deployado y `.env` listo → dispatch `seed-content.yml` (dry_run=false) → verificar `seed/<N>/` + `latest.json` en R2.
+4. **Primer APK**: dispatch `apk-release.yml` (dry_run primero) → APK en R2 + `apk/latest.json`.
+5. **Dashboard**: botón "Publicar APK" ya está en `admin/palabras` (modal `ApkDispatchModal`).
+6. **SW residual**: el error `Failed to convert value to 'Response'` en `/admin/palabras` (bypass `.apk` ya aplicado; si persiste, revisar el handler del SW en `/admin`).
+7. **Aviso de nueva versión** en la app (consultar `apk/latest.json` al arrancar).
+8. **Maestro E2E** (`.maestro/*.yaml` ya creados; requieren un runner).
+
+---
+
+## Variables de entorno (backend prod)
+
+```bash
+# Base
+DATABASE_URL="mysql://...@host:3306/u357487330_piiyaakDB"
+NEXTAUTH_SECRET, NEXTAUTH_URL="https://piiyaak.com"
+GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+ADMIN_EMAIL/PASSWORD/NAME
+CI_SYNC_SECRET=18fad2fded9562819481eee298c3d79223662761a0214d29bb5d722a8454b8d3
+
+# R2 (medios + semillas + APK)
+R2_ACCOUNT_ID=1b0f488650121b288ca19d39d05aac6d
+R2_ACCESS_KEY_ID=dee0f4d467d2da5345732f84e9f9581f
+R2_SECRET_ACCESS_KEY=029f12f6fc35978641ebf130d39d1a54db5e69c139488e5d1db5629c2294ed4c
+R2_BUCKET=ilustraciones-piiyaal-test        # ⚠️ test; usar bucket real de prod
+R2_PUBLIC_BASE_URL=https://pub-cc9e53869548453a91a0d518d085a6c4.r2.dev
+
+# Dispatch (PATs server-only)
+SEED_DISPATCH_TOKEN=github_pat_...
+SEED_GITHUB_OWNER=MalvarezU
+SEED_GITHUB_REPO=DiccionarioNasa
+APK_DISPATCH_TOKEN=github_pat_...
+APK_GITHUB_OWNER=MalvarezU
+APK_GITHUB_REPO=Piiyaak-Mobile-
+```
+
+## Secrets GitHub
+
+**DiccionarioNasa** (Actions): `CI_SYNC_SECRET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` ✅
+**Piiyaak-Mobile-** (Actions): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`, `EXPO_PUBLIC_API_URL=https://piiyaak.com`, `EXPO_PUBLIC_SEED_BASE_URL` ✅
+Faltan en móvil: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (tras generar keystore).
+
+## Secrets deploy-hostinger (faltan, para automatizar el deploy)
+`DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `HOSTINGER_HOST`, `HOSTINGER_USER`, `HOSTINGER_SSH_KEY`, `HOSTINGER_PORT`.
+
+---
+
+## Gotchas críticos (leer antes de tocar nada)
+
+1. **contentVersion**: prod tiene **67**; dev **4-5**. El seed se dispara contra prod (fuente de verdad), nunca al revés.
+2. **Borrar DB del celu tras sembrar**: el dispositivo solo re-semilla `assets/piiyaak.db` cuando la DB local falta; si agregás contenido embebido, borrá `files/SQLite/piiyaak.db` y relanzá.
+3. **EXPO_PUBLIC_* se hornea en Metro** (no en el build nativo) para dev-client: arrancar `EXPO_PUBLIC_API_URL=... EXPO_PUBLIC_SEED_BASE_URL=... npx expo start`. Sin la var, el gate cae al fallback y no descarga.
+4. **npm install con Metro vivo** → cache envenenado (500 "Unable to resolve"). Pausar Metro antes de instalar paquetes; reiniciar con `--clear`.
+5. **Los tests del backend corren contra la MISMA DB de dev** (`piiyaak_test`); una corrida completa resetea el `ContentVersion` a 4. Los datos sobreviven (bumps por mutación).
+6. **`zod` debe estar en `dependencies`** (no dev): las rutas admin lo importan en runtime; con `NODE_ENV=production` el build falla si está en dev.
+7. **`/descargas/piiyaak.apk` ya no existe**: el link correcto es `/descargar` (página con QR + botón desde `apk/latest.json` de R2).
+8. **SW no intercepta `.apk`**: bypass añadido en `public/sw.js`.
+9. **`android/` es gitignoreado**: la firma release se aplica en CI con `scripts/ci/apply-release-signing.js` (post-prebuild). Ediciones manuales se pierden al regenerar.
+10. **`build.gradle` stock ya trae `signingConfigs.release` (referencia) que apunta al debug.keystore**: el script de CI redefine el bloque con las vars de entorno; local cae a debug.
+
+## Flujo de deploy backend (manual, actual)
+1. Tarball `piiyaak-nextjs.tar.gz` (desde `origin/main`, sin `.env`/node_modules) → Hostinger.
+2. Descomprimir en `~/current`, `.env` intacto (agregar las 6 vars de dispatch).
+3. `npm ci && npx prisma generate && npm run build`, reiniciar el servicio Node.
+4. Verificar: `https://piiyaak.com/api/sync/version` → JSON con `contentVersion` + `serverTime`; `https://piiyaak.com/descargar` → 200.
+
+## Verificación actual (2026-11-11)
+- `https://piiyaak.com/api/sync/version` → ✅ `{"contentVersion":"67","serverTime":"..."}`.
+- `https://piiyaak.com/descargar` → ✅ 200 (en build nuevo; si da 404, el deploy viejo está corriendo).
+- Simulación local del tarball (extraer + npm ci + build + start) → ✅ los 3 endpoints responden.
+
+## Estructura de scripts (móvil)
+- `scripts/generate-bundled-media-map.ts` → `src/bundled-media.generated.ts` (require() de assets/audios + illustrations).
+- `scripts/embed-seed-media.ts` → copia `media/<sha>.<ext>` del seed a `assets/audios|images` con nombre original; verifica sha256.
+- `scripts/upload-apk-to-r2.ts` → sube archivo a R2 (credenciales por env).
+- `scripts/ci/apply-release-signing.js` → parchea `build.gradle` post-prebuild (firma release + versionCode por props).
+- `scripts/relate-audios.py`, `relate-illustrations.py`, `export-db.py` → **DEPRECATED** (IDs muertos `cmw6dy*`).
+
+## URLs clave
+- Backend prod: `https://piiyaak.com` (API + admin + descargas).
+- Dev local: `http://localhost:3000` (Metro 8081, DB docker 3307 `piiyaak_test`).
+- R2: bucket `ilustraciones-piiyaal-test`, base `https://pub-cc9e53869548453a91a0d518d085a6c4.r2.dev`.
+- Repos: `MalvarezU/DiccionarioNasa`, `MalvarezU/Piiyaak-Mobile-`.
