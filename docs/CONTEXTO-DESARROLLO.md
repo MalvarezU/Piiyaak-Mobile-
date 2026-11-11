@@ -80,6 +80,7 @@ Logo Piiyaak en header (`logo-white.png`) + tile Diccionario (`logo.png`), app i
 6. **SW residual**: el error `Failed to convert value to 'Response'` en `/admin/palabras` (bypass `.apk` ya aplicado; si persiste, revisar el handler del SW en `/admin`).
 7. **Aviso de nueva versión** en la app (consultar `apk/latest.json` al arrancar).
 8. **Maestro E2E** (`.maestro/*.yaml` ya creados; requieren un runner).
+9. **⚠️ Backlog WEB (pedido del dueño, 2026-11-11)**: (a) los juegos de audios de la WEB siempre muestran las mismas palabras — revisar la selección (probable selección determinista de primeras N en vez de aleatoria); (b) agregar **modo infinito** a los juegos: durar hasta agotar los intentos del jugador (sistema de vidas) — **definir con el dueño cuántos intentos/vidas** antes de terminar.
 
 ---
 
@@ -132,6 +133,7 @@ Faltan en móvil: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASS
 8. **SW no intercepta `.apk`**: bypass añadido en `public/sw.js`.
 9. **`android/` es gitignoreado**: la firma release se aplica en CI con `scripts/ci/apply-release-signing.js` (post-prebuild). Ediciones manuales se pierden al regenerar.
 10. **`build.gradle` stock ya trae `signingConfigs.release` (referencia) que apunta al debug.keystore**: el script de CI redefine el bloque con las vars de entorno; local cae a debug.
+11. **⚠️ BUG del workflow `apk-release.yml` (APKs futuras de CI salen debug-firmadas)**: aunque se configuren los secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` en `Piiyaak-Mobile-`, el workflow **no los inyecta** en el job de build (no define esos env ni ejecuta el decode+`apply-release-signing.js` con las credenciales). Al día 2026-11-11 la APK v1.1 publicada en R2 está debug-firmada (por eso se instala solo tras "fuentes desconocidas" y coexiste con builds locales firmados con `release.keystore`). **Fix pendiente**: en el workflow, decode del secret a `android/keystore/release.keystore` + exportar `KEYSTORE_FILE/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD` antes de `./gradlew assembleRelease` (el script `scripts/ci/apply-release-signing.js` ya soporta las vars). Verificar tras el fix con `apksigner verify --print-certs` (SHA256 esperado del release local: `11757597cbaede64f87c6803f84966d093ef3276db7ae440717697082d2734e4`).
 
 ## Flujo de deploy backend (manual, actual)
 1. Tarball `piiyaak-nextjs.tar.gz` (desde `origin/main`, sin `.env`/node_modules) → Hostinger.
@@ -143,6 +145,19 @@ Faltan en móvil: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASS
 - `https://piiyaak.com/api/sync/version` → ✅ `{"contentVersion":"67","serverTime":"..."}`.
 - `https://piiyaak.com/descargar` → ✅ 200 (en build nuevo; si da 404, el deploy viejo está corriendo).
 - Simulación local del tarball (extraer + npm ci + build + start) → ✅ los 3 endpoints responden.
+
+## Fixes v1.2 (2026-11-11) — bugs reportados de la APK v1.1
+
+**Reporte del dueño**: (1) imágenes/ilustraciones/portadas no cargan offline; (2) juego Escucha dice "no hay audios" pese a que la DB embebida v67 trae 31 audios.
+
+**Causas confirmadas en código + fixes aplicados** (todo JS-only, sin `expo prebuild --clean`):
+1. **Puente bundled faltante**: `CourseCover` (`cursos/index.tsx`) y `CachedLessonImage`/`CachedLessonAudio` (`cursos/leccion/[id].tsx`) resolvían SOLO con `resolveCachedUri` (media-cache → URL remota) → offline en blanco aunque la portada (`fcc700da…jpg`) y el audio de lección (`1794210299397-Kupe.ogg`) están embebidos. **Fix**: bundled primero (`resolveBundledIllustrationUri`/`resolveBundledAudioUri`, ahora exportados), luego cache, remota al final. Clave de cache con URL cruda (parity con `populateMediaCache`).
+2. **Escucha frágil**: usaba `listAZ(null,200)` (corte alfabético) + filtro `audioUrl`. Con v67 pasaba (23 de las primeras 200 tienen audio), pero el reporte implicaba DB viva ≠ v67 (datos de instalación previa: el copy de primer arranque hace skip si el archivo existe). **Fix**: query directa `listWithAudio(limit)` nueva en `WordStore` (sqlite + memory) + **defensa de re-seed** en `db-context.tsx`: si la DB viva está vacía (0 words) o ilegible, se reinstala desde el bundle (una DB con datos NUNCA se toca).
+3. **Medios del seed aislados en disco**: `seed-swap.ts` movía los medios del zip con nombre `<sha256-contenido>` pero `MediaCache.localUriFor` busca `url_<url-normalizada>` → nadie los resolvía jamás; además `moveFile` podía fallar sin `ensureDir` previo. **Fix**: el swap recibe `mediaUrls` (leídas de la DB nueva: words + portadas publicadas), matching file↔URL por basename, mueve/copía con la clave EXACTA `url_<norm>` (`urlCacheFileName` exportado desde media-cache), `ensureDir` de `audios/`+`illustrations/` y `copyFile` para URLs duplicadas. Sin URL vigente conocida, el archivo conserva su nombre por contenido.
+4. **Tests**: `listWithAudio` (store), rework de `seed-swap.test.ts` (fakeDeps con copyFile/ensureDir/copies + 2 tests nuevos + renames), `seed-flow.test.ts` (fakeTempDb con `listMediaUrls` + `copyFile`). Typecheck ✅, 238/238 ✅.
+
+**Build de prueba**: versionCode **2** / versionName **1.2** (`-PversionCode=2 -PversionName=1.2`), firma release local (SHA256 `11757597cbaede64…`). Deploy a R2 recién tras la validación del dueño en dispositivo.
+⚠️ **Trap firma local**: `keystore.env` asigna las vars SIN `export` → sourcearlo simple deja al `gradlew` (proceso hijo) sin verlas y el build **sale debug-signed sin error** (`CN=Android Debug`). Usar `set -a && source ~/.piiyaak/keys/keystore.env && set +a` y verificar SIEMPRE con `apksigner verify --print-certs` (tools: `$ANDROID_HOME/build-tools/36.0.0/`).
 
 ## Estructura de scripts (móvil)
 - `scripts/generate-bundled-media-map.ts` → `src/bundled-media.generated.ts` (require() de assets/audios + illustrations).
