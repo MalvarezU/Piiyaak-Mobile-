@@ -65,7 +65,7 @@ export default function Completar() {
     let alive = true;
     (async () => {
       if (!store) return;
-      const all = await store.listAZ(null, 50, 0);
+      const all = await store.listRandom(50);
       if (!alive || all.length < 4) return;
       if (alive) {
         const picked = shuffle(all as WordRow[]).slice(0, 8);

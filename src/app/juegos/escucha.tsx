@@ -4,10 +4,10 @@ import { Volume2 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme, spacing, minHit } from "../../theme";
-import { Screen, ThemedText, Button } from "../../components/ui";
+import { Screen, ThemedText, Card, Button } from "../../components/ui";
 import type { WordRow } from "../../db/types";
 import { createAudioPlayer } from "../../audio-player";
-import { resolveBundledAudioUri } from "../../audio";
+import { resolveAudioUri } from "../../audio";
 
 const MIN = 4;
 const MAX_ROUNDS = 8;
@@ -28,6 +28,10 @@ export default function Escucha() {
   const router = useRouter();
   const player = useRef(createAudioPlayer());
   const [rounds, setRounds] = useState<WordRow[]>([]);
+  /** Pool completo con audio: fuente de distractores con variedad real. */
+  const [pool, setPool] = useState<WordRow[]>([]);
+  /** Incrementa al reintentar: re-baraja rondas (antes repetía las mismas 8). */
+  const [gameKey, setGameKey] = useState(0);
   const [roundIndex, setRoundIndex] = useState(0);
   const [options, setOptions] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -46,9 +50,10 @@ export default function Escucha() {
       // cuando las palabras con audio ordenaban tarde.
       const all = await store.listWithAudio(200);
       if (!alive) return;
-      const pool = shuffle(all as WordRow[]);
-      const chosen = pool.slice(0, MAX_ROUNDS);
+      const shuffled = shuffle(all as WordRow[]);
+      const chosen = shuffled.slice(0, MAX_ROUNDS);
       if (alive) {
+        setPool(all as WordRow[]);
         setRounds(chosen);
         setReady(true);
       }
@@ -56,7 +61,7 @@ export default function Escucha() {
     return () => {
       alive = false;
     };
-  }, [store]);
+  }, [store, gameKey]);
 
   useEffect(() => {
     const p = player.current;
@@ -69,7 +74,10 @@ export default function Escucha() {
     if (rounds.length === 0) return;
     const word = rounds[roundIndex];
     if (!word) return;
-    const others = rounds.filter((w) => w.id !== word.id);
+    // Distractores del pool COMPLETO con audio (no solo de las 8 rondas
+    // de la sesión): más variedad y opciones menos predecibles.
+    const source = pool.length >= 4 ? pool : rounds;
+    const others = source.filter((w) => w.id !== word.id);
     const distractors = shuffle(others).slice(0, 3).map((w) => w.spanish);
     const opts = shuffle([word.spanish, ...distractors]);
     setOptions(opts);
@@ -77,7 +85,7 @@ export default function Escucha() {
     setFeedback(null);
     setPlaying(false);
     void player.current.unload();
-  }, [rounds, roundIndex]);
+  }, [rounds, roundIndex, pool]);
 
   const currentWord = rounds[roundIndex] as WordRow;
 
@@ -85,11 +93,12 @@ export default function Escucha() {
     if (!currentWord?.audioUrl || playing) return;
     setPlaying(true);
     try {
-      const uri = await resolveBundledAudioUri(currentWord.audioUrl);
-      if (!uri) {
-        setPlaying(false);
-        return;
-      }
+      // cache (media-cache) → heredado → bundled → remota: las palabras
+      // embebidas suenan offline y las no embebidas vía red/caché.
+      const uri = await resolveAudioUri({
+        id: currentWord.id,
+        audioUrl: currentWord.audioUrl,
+      });
       await player.current.load(uri, () => setPlaying(false));
       await player.current.play();
     } catch {
@@ -114,6 +123,10 @@ export default function Escucha() {
     setDone(false);
     setScore(0);
     setRoundIndex(0);
+    // Pausa el estado listo y re-baraja: "Reintentar" ya no repite las
+    // mismas rondas (el efecto re-dibuja con gameKey nuevo).
+    setReady(false);
+    setGameKey((k) => k + 1);
   };
 
   if (!store || !ready) {
@@ -235,15 +248,39 @@ export default function Escucha() {
         </View>
 
         {feedback ? (
-          <ThemedText
-            variant="bodyStrong"
-            style={[
-              styles.feedback,
-              { color: feedback === "correct" ? theme.success : theme.danger },
-            ]}
-          >
-            {feedback === "correct" ? "✓ Correcto" : `✗ Era: ${correctSpanish}`}
-          </ThemedText>
+          <>
+            <ThemedText
+              variant="bodyStrong"
+              style={[
+                styles.feedback,
+                { color: feedback === "correct" ? theme.success : theme.danger },
+              ]}
+            >
+              {feedback === "correct" ? "✓ Correcto" : "✗ Incorrecto"}
+            </ThemedText>
+            {/* Revelado pedagógico: la palabra escuchada, cómo se escribe
+                y su pronunciación (antes solo coloreaba la opción). */}
+            <Card style={styles.reveal}>
+              <ThemedText variant="caption">
+                La palabra en Nasa Yuwe:
+              </ThemedText>
+              <ThemedText variant="heading" style={styles.revealWord}>
+                {currentWord.nasaYuwe}
+              </ThemedText>
+              {currentWord.pronunciation ? (
+                <ThemedText variant="caption" style={styles.revealPron}>
+                  [{currentWord.pronunciation}]
+                </ThemedText>
+              ) : null}
+              <Button
+                title="Escuchar de nuevo"
+                variant="ghost"
+                icon={<Volume2 size={16} color={theme.primary} />}
+                onPress={handlePlay}
+                style={styles.revealBtn}
+              />
+            </Card>
+          </>
         ) : null}
 
         {selected !== null ? (
@@ -288,6 +325,13 @@ const styles = StyleSheet.create({
   feedback: {
     textAlign: "center",
   },
+  reveal: {
+    gap: spacing.xs,
+    alignItems: "center",
+  },
+  revealWord: { textAlign: "center" },
+  revealPron: { textAlign: "center", color: theme.muted },
+  revealBtn: { marginTop: spacing.xs },
   nextBtn: {
     alignSelf: "stretch",
   },

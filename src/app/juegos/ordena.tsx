@@ -38,7 +38,7 @@ export default function Ordena() {
 
   const loadWord = async () => {
     if (!store) return;
-    const all = await store.listAZ(null, 50, 0);
+    const all = await store.listRandom(50);
     const eligible = (all as WordRow[]).filter((w) => isOrdenaEligible({ spanish: w.spanish, nasaYuwe: w.nasaYuwe }));
     if (eligible.length === 0) return;
     const w = shuffle(eligible)[0];

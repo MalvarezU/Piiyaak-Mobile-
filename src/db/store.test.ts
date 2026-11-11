@@ -44,6 +44,23 @@ describe("MemoryWordStore [app]", () => {
     expect((await s.listWithAudio(200)).map((r) => r.id)).toEqual(["a1", "z1"]);
     expect((await s.listWithAudio(1)).map((r) => r.id)).toEqual(["a1"]);
   });
+
+  it("listRandom: muestrea desde TODO el diccionario, no solo el tramo alfabético", async () => {
+    const s = new MemoryWordStore();
+    const words = Array.from({ length: 60 }, (_, i) =>
+      w(`id-${i}`, `palabra-${String(i).padStart(2, "0")}`)
+    );
+    await s.upsertWords(words);
+    // Pedir todas: con el cap de listAZ(50) faltarían las últimas 10;
+    // el pool aleatorio cubre el diccionario completo.
+    const all = await s.listRandom(60);
+    expect(all).toHaveLength(60);
+    expect(new Set(all.map((r) => r.id)).size).toBe(60);
+    // Límite respetado y sin duplicados (muestreo sin reemplazo).
+    const sample = await s.listRandom(50);
+    expect(sample).toHaveLength(50);
+    expect(new Set(sample.map((r) => r.id)).size).toBe(50);
+  });
 });
 
 describe("sync [app]", () => {

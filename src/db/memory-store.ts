@@ -56,6 +56,18 @@ export class MemoryWordStore implements WordStore {
     return all.slice(offset, offset + limit);
   }
 
+  /** Paridad con SQLiteWordStore.listRandom: muestra aleatoria total. */
+  async listRandom(limit = 50): Promise<WordRow[]> {
+    const all = [...this.words.values()].filter((w) => w.status !== 'DRAFT');
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = all[i]!;
+      all[i] = all[j]!;
+      all[j] = tmp;
+    }
+    return all.slice(0, limit);
+  }
+
   async listCategories(): Promise<string[]> {
     const set = new Set<string>();
     for (const w of this.words.values()) {

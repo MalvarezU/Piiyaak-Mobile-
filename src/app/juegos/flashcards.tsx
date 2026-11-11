@@ -37,7 +37,7 @@ export default function Flashcards() {
     let alive = true;
     (async () => {
       if (!store) return;
-      const words = await store.listAZ(null, 50, 0);
+      const words = await store.listRandom(50);
       if (!alive || words.length < 4) return;
       const pool = words as WordRow[];
       const ask = shuffle(pool).slice(0, 8);

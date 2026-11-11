@@ -108,6 +108,12 @@ export interface WordStore {
   countWordsWithAudio(): Promise<number>;
   /** Palabras con audio publicado (juegos de escucha): query directa. */
   listWithAudio(limit?: number): Promise<WordRow[]>;
+  /**
+   * Muestra aleatoria desde TODO el diccionario publicado (pools de
+   * juegos): antes los juegos leían `listAZ(null, 50, 0)` — siempre las
+   * mismas primeras 50 alfabéticas. `ORDER BY RANDOM()` en SQLite.
+   */
+  listRandom(limit?: number): Promise<WordRow[]>;
   getLastSync(): Promise<string | null>;
   setLastSync(iso: string): Promise<void>;
   getKV(key: string): Promise<string | null>;
@@ -266,6 +272,14 @@ export class SQLiteWordStore implements WordStore {
   async listWithAudio(limit = 200): Promise<WordRow[]> {
     return this.db.getAllAsync<WordRow>(
       "SELECT * FROM words WHERE audioUrl IS NOT NULL AND audioUrl != '' AND (status IS NULL OR status != 'DRAFT') ORDER BY spanish LIMIT ?",
+      [limit]
+    );
+  }
+
+  /** Pools de juegos: muestra aleatoria desde TODO el diccionario. */
+  async listRandom(limit = 50): Promise<WordRow[]> {
+    return this.db.getAllAsync<WordRow>(
+      "SELECT * FROM words WHERE (status IS NULL OR status != 'DRAFT') ORDER BY RANDOM() LIMIT ?",
       [limit]
     );
   }
