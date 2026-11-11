@@ -38,8 +38,12 @@ let copied = 0;
 for (const f of manifest.files) {
   const src = join(mediaDir, basename(f.localPath));
   if (!existsSync(src)) throw new Error(`falta el medio del seed: ${src}`);
-  // Destino: assets/audios/<basename> o assets/images/<basename> (por el objectKey)
-  const kind = f.objectKey.startsWith("audios/") ? "audios" : "images";
+  // Destino: assets/audios/<basename> o assets/illustrations/<basename> (por el objectKey)
+  const kind = f.objectKey.startsWith("audios/")
+    ? "audios"
+    : f.objectKey.startsWith("illustrations/")
+      ? "illustrations"
+      : "images";
   const destDir = join(assetsDir, kind);
   mkdirSync(destDir, { recursive: true });
   const dest = join(destDir, basename(f.objectKey));

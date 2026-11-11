@@ -46,6 +46,20 @@ const RELEASE_VERSION = `        // CI: versionCode/Name llegan por propiedades 
         versionCode project.findProperty('versionCode')?.toInteger() ?: 1
         versionName project.findProperty('versionName') ?: "0.1.0"`;
 
+// buildTypes.release referencia signingConfigs.debug en el template de Expo
+// (SDK 55). Sin este parche, la APK release sale SIEMPRE firmada en debug
+// aunque las 4 vars de entorno estén seteadas. Ancla con los comentarios
+// del template para no tocar el buildType debug.
+const ANCHOR_RELEASE_BUILDTYPE = `        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug`;
+const RELEASE_BUILDTYPE = `        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.release`;
+const MARK_RELEASE_BUILDTYPE = "signingConfig signingConfigs.release";
+
 let s = fs.readFileSync(gradlePath, "utf8");
 let changed = false;
 
@@ -64,6 +78,13 @@ const MARK_VERSION = "project.findProperty('versionCode')";
 
 s = once(s, ANCHOR_DEBUG_CLOSE, RELEASE_BLOCK, "signingConfigs", MARK_RELEASE);
 s = once(s, ANCHOR_VERSION, RELEASE_VERSION, "versionCode", MARK_VERSION);
+s = once(
+  s,
+  ANCHOR_RELEASE_BUILDTYPE,
+  RELEASE_BUILDTYPE,
+  "buildTypes.release signingConfig",
+  MARK_RELEASE_BUILDTYPE
+);
 
 if (changed) {
   fs.writeFileSync(gradlePath, s);

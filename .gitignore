@@ -10,3 +10,6 @@ expo-env.d.ts
 # Native prebuild (regenerable with expo prebuild)
 android/
 ios/
+
+# Build artifacts (seed/APK locales)
+dist/

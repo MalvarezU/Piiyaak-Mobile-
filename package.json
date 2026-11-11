@@ -45,6 +45,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1166.0",
     "@eslint/eslintrc": "^3.3.7",
     "@types/react": "~19.2.10",
     "eslint": "^9.39.5",
