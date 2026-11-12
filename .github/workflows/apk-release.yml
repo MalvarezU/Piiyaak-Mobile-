@@ -71,6 +71,12 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      - name: Verificar tipos y tests (gate de release)
+        run: |
+          npm run typecheck
+          npm run test:run
+          npm run test:ui:run
+
       - name: Descargar última semilla publicada
         env:
           R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
