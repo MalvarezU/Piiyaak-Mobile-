@@ -34,6 +34,9 @@ jest.mock("../../db-context", () =>
 import Historial from "../historial";
 import { setDbDouble, type DbDouble } from "../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Pantalla Historial: lista de fichas vistas, estado vacío, limpieza del
  * historial y pull-to-refresh.

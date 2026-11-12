@@ -43,6 +43,9 @@ jest.mock("expo-router", () => ({
 
 import Resetear from "../resetear";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Pantalla Resetear: precarga el token del enlace, valida token y contraseña
  * y avisa al usuario con el mensaje del servidor.

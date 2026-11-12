@@ -13,6 +13,9 @@ jest.mock("../../../db-context", () =>
 import Ordena from "../ordena";
 import { setDbDouble } from "../../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Con `Math.random` fijo el Fisher-Yates de la pantalla es la identidad: la
  * palabra elegida es la primera elegible del store y las fichas salen en el

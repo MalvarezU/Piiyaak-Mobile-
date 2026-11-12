@@ -14,6 +14,9 @@ jest.mock("../../../db-context", () =>
 import Relacionar from "../relacionar";
 import { setDbDouble } from "../../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Con `Math.random` fijo el Fisher-Yates de la pantalla es la identidad: el
  * par de la derecha corresponde, en el mismo orden, al de la izquierda.

@@ -79,6 +79,24 @@ jest.mock("expo-router", () => ({
 import Cursos from "../index";
 import { setDbDouble } from "../../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
+/**
+ * `MemoryCourseStore` no calcula `progressPct` (lo calcula el store SQLite),
+ * así que esta subclase lo agrega para poder ejercitar la banda de
+ * "retomar donde quedaste".
+ */
+class CourseStoreConProgreso extends MemoryCourseStore {
+  override async getCourses(): Promise<CourseRow[]> {
+    const cursos = await super.getCourses();
+    return cursos.map((c) => ({
+      ...c,
+      progressPct: c.id === "c1" ? 50 : null,
+    }));
+  }
+}
+
 function curso(id: string, title: string, description: string): CourseRow {
   return {
     id,
@@ -168,6 +186,98 @@ describe("Cursos (pantalla)", () => {
     mockSyncCourses.mockRejectedValue(new Error("sin red"));
 
     await montarCursos();
+
+    expect(
+      await screen.findByText(
+        "No se pudo sincronizar. Revisá la conexión e intentá de nuevo."
+      )
+    ).toBeTruthy();
+  });
+
+  it("muestra la banda de continuar donde quedaste", async () => {
+    const storeConProgreso = new CourseStoreConProgreso();
+    await storeConProgreso.upsertCourse(curso("c1", "Primer curso", ""));
+    await storeConProgreso.upsertModule({
+      id: "m1",
+      courseId: "c1",
+      title: "Módulo 1",
+      order: 0,
+      lessons: [],
+    });
+    await storeConProgreso.upsertLesson({
+      id: "l1",
+      moduleId: "m1",
+      title: "Primera lección",
+      order: 0,
+      lessonNumber: "1",
+      content: "{}",
+    });
+    mockCourseStore.current = storeConProgreso;
+
+    await montarCursos();
+
+    expect(await screen.findByText("RETOMAR CURSO")).toBeTruthy();
+    // La banda y la portada destacada muestran el mismo avance.
+    expect(screen.getAllByText("50% completado").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeTruthy();
+  });
+
+  it("retoma la lección pendiente desde la banda", async () => {
+    const storeConProgreso = new CourseStoreConProgreso();
+    await storeConProgreso.upsertCourse(curso("c1", "Primer curso", ""));
+    await storeConProgreso.upsertModule({
+      id: "m1",
+      courseId: "c1",
+      title: "Módulo 1",
+      order: 0,
+      lessons: [],
+    });
+    await storeConProgreso.upsertLesson({
+      id: "l1",
+      moduleId: "m1",
+      title: "Primera lección",
+      order: 0,
+      lessonNumber: "1",
+      content: "{}",
+    });
+    mockCourseStore.current = storeConProgreso;
+
+    await montarCursos();
+    await screen.findByText("RETOMAR CURSO");
+
+    const user = userEvent.setup();
+    await user.press(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: "/cursos/leccion/[id]",
+      params: { id: "l1" },
+    });
+  });
+
+  it("el botón de limpiar búsqueda vacía el buscador", async () => {
+    await courseStore.upsertCourse(curso("c1", "Curso del agua", ""));
+
+    await montarCursos();
+    await screen.findByText("Curso del agua");
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Buscar cursos"), "agua");
+    await user.press(screen.getByLabelText("Limpiar búsqueda"));
+
+    expect(screen.getByLabelText("Buscar cursos").props.value).toBe("");
+  });
+
+  it("avisa el error cuando falla la sincronización manual", async () => {
+    // El auto-sync al entrar sí funciona; el botón falla.
+    mockSyncCourses
+      .mockImplementationOnce(async () => ({ courses: 0, modules: 0, lessons: 0 }))
+      .mockRejectedValue(new Error("sin red"));
+
+    await montarCursos();
+    await screen.findByText("Sincronizar cursos");
+
+    const user = userEvent.setup();
+    await user.press(screen.getByRole("button", { name: "Sincronizar cursos" }));
 
     expect(
       await screen.findByText(

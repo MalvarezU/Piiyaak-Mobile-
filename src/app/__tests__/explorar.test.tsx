@@ -16,6 +16,9 @@ jest.mock("../../db-context", () =>
 import Explorar from "../explorar";
 import { setDbDouble } from "../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 const WORDS = [
   makeWord({ id: "w1", spanish: "agua", nasaYuwe: "mü", category: "naturaleza" }),
   makeWord({ id: "w2", spanish: "casa", nasaYuwe: "tsa", category: "hogar" }),

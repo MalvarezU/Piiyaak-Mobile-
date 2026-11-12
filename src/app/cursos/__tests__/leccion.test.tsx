@@ -1,5 +1,5 @@
 import { describe, it, expect, jest, beforeEach } from "@jest/globals";
-import { render, screen, userEvent, act } from "@testing-library/react-native";
+import { render, screen, userEvent, act, waitFor } from "@testing-library/react-native";
 import type { ReactNode } from "react";
 import { MemoryWordStore } from "../../../db/memory-store";
 import { MemoryCourseStore } from "../../../db/course-store";
@@ -54,6 +54,9 @@ jest.mock("expo-router", () => ({
 
 import Leccion from "../leccion/[id]";
 import { setDbDouble } from "../../../test/doubles/db-context";
+
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
 
 function leccion(id: string, title: string, content: unknown): LessonRow {
   return {
@@ -192,6 +195,115 @@ describe("Lección (pantalla)", () => {
       pathname: "/cursos/leccion/[id]",
       params: { id: "l2" },
     });
+  });
+
+  it("aprueba el quiz y completa la lección automáticamente", async () => {
+    await courseStore.upsertLesson(
+      leccion("l1", "Saludos básicos", {
+        version: 2,
+        blocks: [
+          {
+            id: "bq",
+            type: "quiz",
+            passScore: 70,
+            questions: [
+              {
+                prompt: "¿Cómo se dice casa?",
+                options: [
+                  { text: "tsa", correct: true },
+                  { text: "mü", correct: false },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+    );
+    const setProgress = jest.spyOn(courseStore, "setProgress");
+
+    await montarLeccion();
+    await screen.findByText("1. ¿Cómo se dice casa?");
+
+    const user = userEvent.setup();
+    await user.press(screen.getByLabelText("Opción 1 de la pregunta 1"));
+    await user.press(screen.getByRole("button", { name: "Revisar" }));
+
+    expect(await screen.findByText("Aprobado — 100%")).toBeTruthy();
+    await waitFor(() =>
+      expect(setProgress).toHaveBeenCalledWith("l1", true, 100)
+    );
+  });
+
+  it("muestra el bloque de escucha y aprueba al acertar", async () => {
+    await courseStore.upsertLesson(
+      leccion("l1", "Saludos básicos", {
+        version: 2,
+        blocks: [
+          {
+            id: "bl",
+            type: "listening",
+            question: "¿Qué significa tsa?",
+            media: { url: "https://cdn.test/tsa.mp3" },
+            options: [
+              { text: "casa", correct: true },
+              { text: "agua", correct: false },
+            ],
+          },
+        ],
+      })
+    );
+
+    await montarLeccion();
+    await screen.findByText("¿Qué significa tsa?");
+
+    const user = userEvent.setup();
+    await user.press(screen.getByLabelText("Opción 1"));
+    await user.press(screen.getByRole("button", { name: "Revisar" }));
+
+    expect(await screen.findByText("¡Correcto!")).toBeTruthy();
+  });
+
+  it("muestra la imagen y el audio del bloque de medios", async () => {
+    await courseStore.upsertLesson(
+      leccion("l1", "Saludos básicos", {
+        version: 2,
+        blocks: [
+          {
+            id: "bi",
+            type: "image",
+            url: "https://cdn.test/casa.png",
+            caption: "Una casa",
+          },
+          {
+            id: "ba",
+            type: "audio",
+            media: { url: "https://cdn.test/tsa.mp3" },
+          },
+        ],
+      })
+    );
+
+    await montarLeccion();
+
+    expect(await screen.findByText("Una casa")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Reproducir audio" }).length).toBeGreaterThan(0);
+  });
+
+  it("deja marcar la lección cuando el contenido no se puede interpretar", async () => {
+    await courseStore.upsertLesson({
+      id: "l1",
+      moduleId: "m1",
+      title: "Saludos básicos",
+      order: 0,
+      lessonNumber: "1",
+      content: "esto no es json",
+    });
+
+    await montarLeccion();
+
+    expect(
+      await screen.findByRole("button", { name: "Marcar como completada" })
+    ).toBeTruthy();
   });
 
   it("deshabilita la navegación hacia atrás en la primera lección", async () => {

@@ -50,6 +50,9 @@ jest.mock("../../../audio", () => ({
 import Escucha from "../escucha";
 import { setDbDouble } from "../../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /** 4 palabras con audio: el mínimo que exige el juego (`MIN = 4`). */
 const WORDS_WITH_AUDIO = [
   makeWord({ id: "a1", spanish: "agua", nasaYuwe: "mü", audioUrl: "https://cdn.test/a1.mp3" }),

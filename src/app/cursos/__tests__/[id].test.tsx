@@ -53,6 +53,9 @@ jest.mock("expo-router", () => ({
 import CursoDetail from "../[id]";
 import { setDbDouble } from "../../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /** Monta la pantalla y deja que los efectos asíncronos se resuelvan. */
 async function montarDetalle() {
   render(<CursoDetail />);

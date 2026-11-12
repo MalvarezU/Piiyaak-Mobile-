@@ -28,6 +28,9 @@ jest.mock("expo-router", () => ({
 import Registro from "../registro";
 import { REGISTRATION_DISABLED_MESSAGE } from "../../api";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Pantalla Registro: desde la Fase 3 (Google-first) el servidor responde
  * 410 Gone al registro con correo, así que la ruta se conserva como aviso

@@ -55,6 +55,9 @@ jest.mock("../../../audio", () => ({
 import Ficha from "../[id]";
 import { setDbDouble } from "../../../test/doubles/db-context";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Pantalla Ficha: datos de la palabra, favoritos, historial y media offline.
  */
@@ -198,6 +201,32 @@ describe("Ficha (pantalla)", () => {
     );
     expect(mockAudioPlayer.play).toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: "Pausar" })).toBeTruthy();
+  });
+
+  it("el botón de audio alterna entre Reproducir y Pausar", async () => {
+    const store = new MemoryWordStore();
+    await store.upsertWords([
+      makeWord({
+        id: "w1",
+        spanish: "casa",
+        nasaYuwe: "tsa",
+        category: "hogar",
+        audioUrl: "https://cdn.test/casa.mp3",
+      }),
+    ]);
+    setDbDouble({ store });
+
+    render(<Ficha />);
+    await screen.findByText("casa");
+
+    const user = userEvent.setup();
+    await user.press(screen.getByRole("button", { name: "Reproducir" }));
+    expect(await screen.findByRole("button", { name: "Pausar" })).toBeTruthy();
+
+    await user.press(screen.getByRole("button", { name: "Pausar" }));
+
+    expect(await screen.findByRole("button", { name: "Reproducir" })).toBeTruthy();
+    expect(mockAudioPlayer.pause).toHaveBeenCalled();
   });
 
   it("no ofrece reproducción cuando la palabra no tiene audio", async () => {

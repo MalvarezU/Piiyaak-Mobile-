@@ -38,6 +38,9 @@ jest.mock("expo-router", () => ({
 
 import Recuperar from "../recuperar";
 
+// Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
+jest.setTimeout(30_000);
+
 /**
  * Pantalla Recuperar: pide el correo, valida antes de llamar a la API y
  * muestra el mensaje que devuelve el servidor.
