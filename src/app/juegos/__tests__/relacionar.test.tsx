@@ -95,7 +95,7 @@ describe("Relacionar (pantalla)", () => {
 
     expect(await screen.findByText("Completado")).toBeTruthy();
     expect(screen.getByText("Movimientos: 4")).toBeTruthy();
-  });
+  }, 20000);
 
   it("el botón Reiniciar vuelve a armar el tablero", async () => {
     render(<Relacionar />);

@@ -41,7 +41,8 @@ describe("Ajustes (pantalla)", () => {
     expect(screen.getByText("Última sincronización")).toBeTruthy();
     expect(screen.getByText("nunca")).toBeTruthy();
     expect(screen.getByText("Palabras locales")).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
+    // El conteo local se resuelve contra el store: es asíncrono.
+    expect(await screen.findByText("3")).toBeTruthy();
     expect(screen.getByText("Cambios pendientes")).toBeTruthy();
     expect(screen.getByText("0")).toBeTruthy();
   });

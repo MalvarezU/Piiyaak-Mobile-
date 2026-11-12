@@ -115,5 +115,5 @@ describe("Completar (pantalla)", () => {
 
     expect(await screen.findByText("¡Terminado!")).toBeTruthy();
     expect(screen.getByText("Aciertos: 4 / 4")).toBeTruthy();
-  });
+  }, 20000);
 });

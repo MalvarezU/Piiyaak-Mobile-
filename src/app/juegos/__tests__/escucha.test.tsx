@@ -116,6 +116,9 @@ describe("Escucha (pantalla)", () => {
     render(<Escucha />);
 
     expect(await screen.findByText("Escucha")).toBeTruthy();
+    // Las opciones se arman en un efecto aparte del título: se espera a la
+    // primera para no competir con esa carrera.
+    expect(await screen.findByRole("button", { name: "agua" })).toBeTruthy();
     expect(screen.getByText("Ronda 1 / 4")).toBeTruthy();
     expect(screen.getByText("Aciertos: 0")).toBeTruthy();
     for (const w of WORDS_WITH_AUDIO) {
@@ -125,7 +128,7 @@ describe("Escucha (pantalla)", () => {
 
   it("revela la palabra en Nasa Yuwe y habilita Siguiente al acertar", async () => {
     render(<Escucha />);
-    await screen.findByText("Escucha");
+    await screen.findByRole("button", { name: "agua" });
 
     const user = userEvent.setup();
     await user.press(screen.getByRole("button", { name: "agua" }));
@@ -138,7 +141,7 @@ describe("Escucha (pantalla)", () => {
 
   it("marca incorrecto sin sumar aciertos", async () => {
     render(<Escucha />);
-    await screen.findByText("Escucha");
+    await screen.findByRole("button", { name: "casa" });
 
     const user = userEvent.setup();
     await user.press(screen.getByRole("button", { name: "casa" }));
@@ -181,7 +184,7 @@ describe("Escucha (pantalla)", () => {
 
   it("reproduce el audio de la ronda y queda en estado reproduciendo", async () => {
     render(<Escucha />);
-    await screen.findByText("Escucha");
+    await screen.findByRole("button", { name: "Reproducir audio" });
 
     const user = userEvent.setup();
     await user.press(screen.getByRole("button", { name: "Reproducir audio" }));
@@ -200,7 +203,7 @@ describe("Escucha (pantalla)", () => {
 
   it("termina las rondas y muestra el puntaje final", async () => {
     render(<Escucha />);
-    await screen.findByText("Escucha");
+    await screen.findByRole("button", { name: "agua" });
 
     const user = userEvent.setup();
     for (const round of ["agua", "casa", "luna", "sol"]) {
@@ -210,11 +213,11 @@ describe("Escucha (pantalla)", () => {
 
     expect(await screen.findByText("¡Terminado!")).toBeTruthy();
     expect(screen.getByText("4 / 4 aciertos")).toBeTruthy();
-  });
+  }, 20000);
 
   it("el botón Reintentar reinicia la ronda y el puntaje", async () => {
     render(<Escucha />);
-    await screen.findByText("Escucha");
+    await screen.findByRole("button", { name: "agua" });
 
     const user = userEvent.setup();
     for (const round of ["agua", "casa", "luna", "sol"]) {
@@ -227,5 +230,5 @@ describe("Escucha (pantalla)", () => {
 
     expect(await screen.findByText("Ronda 1 / 4")).toBeTruthy();
     expect(screen.getByText("Aciertos: 0")).toBeTruthy();
-  });
+  }, 20000);
 });

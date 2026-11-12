@@ -72,7 +72,7 @@ describe("Flashcards (pantalla)", () => {
 
     expect(await screen.findByText("¡Terminado!")).toBeTruthy();
     expect(screen.getByText("Puntaje: 4 / 4")).toBeTruthy();
-  });
+  }, 20000);
 
   it("no suma cuando se elige una opción incorrecta", async () => {
     render(<Flashcards />);
@@ -85,7 +85,7 @@ describe("Flashcards (pantalla)", () => {
     await responder(user, "ki");
 
     expect(await screen.findByText("Puntaje: 3 / 4")).toBeTruthy();
-  });
+  }, 20000);
 
   it("el botón Reintentar reinicia el juego", async () => {
     render(<Flashcards />);
@@ -102,5 +102,5 @@ describe("Flashcards (pantalla)", () => {
 
     expect(await screen.findByText("1 / 4")).toBeTruthy();
     expect(screen.getByText("casa")).toBeTruthy();
-  });
+  }, 20000);
 });

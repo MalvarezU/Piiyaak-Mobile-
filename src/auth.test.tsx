@@ -234,10 +234,18 @@ describe("AuthProvider / useAuth", () => {
     expect(mockDeleteItem).toHaveBeenCalledWith(SESSION_KEY);
   });
 
-  it("useAuth fuera del provider devuelve el contexto por defecto (sin sesión)", () => {
+  it("useAuth fuera del provider devuelve el contexto por defecto (sin sesión)", async () => {
     const { result } = renderHook(() => useAuth());
 
     expect(result.current.session).toBeNull();
     expect(result.current.ready).toBe(false);
+
+    // Los valores por defecto del `createContext` también son seguros de usar.
+    await expect(result.current.login("ana@example.com", "secreto")).resolves.toBe(false);
+    await expect(result.current.register("ana@example.com", "secreto")).resolves.toEqual({
+      ok: false,
+      message: "",
+    });
+    expect(() => result.current.logout()).not.toThrow();
   });
 });
