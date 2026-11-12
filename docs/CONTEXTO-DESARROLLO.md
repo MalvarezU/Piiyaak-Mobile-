@@ -173,6 +173,13 @@ Validado v1.2 en dispositivo por el dueño ("todo bien") → merge a `origin/mai
 
 > **Nota web preexistente (2026-11-11, para después)**: la suite web completa da `11 files failed / 187 passed` (8 tests fallidos) — todos en `tests/fase-a/*` (sync/tombstones) por `PrismaClientInitializationError: Can't reach database server at localhost:3307` (MySQL de test apagado). **No los rompen los cambios de juegos**: `game-words.test.ts` 13/13 y `escucha-game.test.tsx` 11/11 pasan. Requieren levantar la DB (`localhost:3307 piiyaak_test`) y re-correr.
 
+## Cierre de sesión v1.3 (2026-11-11) — publicada en R2
+
+- Dueño validó v1.3 en dispositivo ("ya quedó") → cierre. Commits en `origin/main`: app `d509432` (incluye ajustes `e08b960`, juegos `a9bbf68`, docs `d66b221`), web `ce501d5`. Sin PRs abiertos (nada que mergear).
+- **R2**: `apk/3/piiyaak-3.apk` (70059005 bytes, el binario exacto probado: versionCode 3, firma release `11757597…`, contentVersion 67) + `apk/latest.json` actualizado. Verificado con curl (200, size coincidente). `/descargar` lo ofrece sin redesplegar (lee `latest.json` en runtime).
+- **Cómo se subió**: vía directa con `scripts/upload-apk-to-r2.ts` + creds del bucket test en `Diccionario nasa /.env.local` (gitignored, `endpoint_override` vacío = R2 real). El botón admin "Publicar APK" NO sirve para esto: dispara `apk-release.yml`, que versiona por `run_number` (saldría 1.2, no 1.3) y su único run histórico falló por `npm ci` desincronizado.
+- **Pendientes**: (1) modo infinito con vidas (dueño: "para más adelante", falta definir vidas); (2) suite fase-a web con MySQL 3307 levantado; (3) decidir versión pública de lanzamiento (interna 1.3, presentar como 1.0 en la página); (4) outbox app aún sin backend completo (botón "Enviar cambios pendientes" visible pero el sync servidor no está implementado del todo).
+
 ## Estructura de scripts (móvil)
 - `scripts/generate-bundled-media-map.ts` → `src/bundled-media.generated.ts` (require() de assets/audios + illustrations).
 - `scripts/embed-seed-media.ts` → copia `media/<sha>.<ext>` del seed a `assets/audios|images` con nombre original; verifica sha256.
