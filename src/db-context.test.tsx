@@ -326,7 +326,7 @@ describe("DbProvider / useDb", () => {
       await waitFor(() => expect(result.current.pendingOutboxCount).toBe(1));
     });
 
-    it.failing(
+    it(
       "[bug] NO marca la entrada como sincronizada si el servidor responde con error",
       async () => {
         // FALLO DE PRODUCCIÓN (src/db-context.tsx:522-531): el POST a
@@ -444,7 +444,7 @@ describe("DbProvider / useDb", () => {
       );
     });
 
-    it.failing(
+    it(
       "[bug] con sesión y red caída deja el historial encolado para no perderlo",
       async () => {
         // FALLO DE PRODUCCIÓN (src/db-context.tsx:543-547): con sesión
@@ -505,7 +505,7 @@ describe("DbProvider / useDb", () => {
   });
 
   describe("persistencia de favoritas", () => {
-    it.failing("[bug] recupera las favoritas guardadas en AsyncStorage al abrir", async () => {
+    it("[bug] recupera las favoritas guardadas en AsyncStorage al abrir", async () => {
       // FALLO DE PRODUCCIÓN (src/db-context.tsx:365-367 contra
       // src/db-context.tsx:285-290): el efecto que persiste las favoritas
       // escribe `[]` en el arranque, antes de que el efecto de apertura
@@ -757,7 +757,7 @@ describe("DbProvider / useDb", () => {
       expect(result.current.syncing).toBe(false);
     });
 
-    it.failing("[bug] el sync global también sincroniza los cursos", async () => {
+    it("[bug] el sync global también sincroniza los cursos", async () => {
       // FALLO DE PRODUCCIÓN (src/db-context.tsx:279 contra
       // src/db-context.tsx:448-451): el store de cursos se guarda en el
       // estado (`setCourseStore`) pero NUNCA en `courseStoreRef` (solo

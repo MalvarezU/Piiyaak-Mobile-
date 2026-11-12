@@ -31,6 +31,7 @@ import {
 import type { WordRow } from "./db/types";
 import { syncNow, flushOutbox, type AuthError } from "./db/sync";
 import { refreshMediaAfterSync } from "./db/sync-media";
+import { syncCourses } from "./db/sync-courses";
 import { defaultMediaCache } from "./db/media-fs";
 import { useAuth } from "./auth";
 import { apiFetch } from "./api";
@@ -83,6 +84,7 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
   const [syncProgress, setSyncProgress] = useState<{ done: number; total: number } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [favsHydrated, setFavsHydrated] = useState(false);
   const [historyIds, setHistoryIds] = useState<string[]>([]);
   const [historyWords, setHistoryWords] = useState<WordRow[]>([]);
   const [pendingOutboxCount, setPendingOutboxCount] = useState(0);
@@ -281,12 +283,15 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       setStore(s);
       setCourseStore(cs);
       storeRef.current = s;
+      courseStoreRef.current = cs;
       setLastSync(await s.getLastSync());
       try {
         const favs = await AsyncStorage.getItem(FAV_KEY);
         if (alive && favs) setFavorites(JSON.parse(favs) as string[]);
       } catch {
         // ignore
+      } finally {
+        if (alive) setFavsHydrated(true);
       }
       // load history
       try {
@@ -363,8 +368,9 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
 
   // persist favorites to AsyncStorage
   useEffect(() => {
+    if (!favsHydrated) return;
     AsyncStorage.setItem(FAV_KEY, JSON.stringify(favorites)).catch(() => {});
-  }, [favorites]);
+  }, [favorites, favsHydrated]);
 
   // derive history words
   useEffect(() => {
@@ -447,7 +453,6 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
       try {
         const cs = courseStoreRef.current;
         if (cs) {
-          const { syncCourses } = await import("./db/sync-courses");
           await syncCourses(cs, session);
         }
       } catch {
@@ -471,6 +476,40 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSyncing(false);
     }
+  };
+
+  /**
+   * Encola una operación en el outbox y, si hay sesión, intenta empujarla al
+   * servidor. Marca como sincronizada la entrada correcta (la que coincide con
+   * entity + op + payload) SOLO si la respuesta es `ok`; en caso contrario
+   * (error de red o respuesta no-ok) queda encolada para el próximo flush.
+   * Así no se pierden cambios del usuario entre dispositivos.
+   */
+  const enqueueAndTryPush = async (
+    entity: string,
+    op: string,
+    payload: string,
+    push?: () => Promise<Response>
+  ): Promise<void> => {
+    const s = storeRef.current ?? store;
+    if (!s) return;
+    await s.addOutbox(entity, op, payload);
+    await refreshPending();
+    if (!session || !push) return;
+    try {
+      const res = await push();
+      if (res.ok) {
+        const pending = await s.pendingOutbox();
+        const matches = pending.filter(
+          (r) => r.entity === entity && r.op === op && r.payload === payload
+        );
+        const target = matches[matches.length - 1];
+        if (target) await s.markOutboxSynced(target.id);
+      }
+    } catch {
+      // queda encolado para reintentar
+    }
+    await refreshPending();
   };
 
   const toggleFavorite = async (word: WordRow) => {
@@ -514,37 +553,44 @@ export function DbProvider({ children }: { children: React.ReactNode }) {
     }
     if (store) {
       const op = isFav ? "favorite.remove" : "favorite.add";
-      await store.addOutbox("favorite", op, JSON.stringify({ wordId: word.id }));
-      await refreshPending();
-      // best-effort push
-      if (session) {
-        try {
-          await apiFetch(
-            "/api/dictionary/favorites",
-            { method: "POST", body: JSON.stringify({ wordId: word.id }) },
-            session
-          );
-          // server toggles; if our desired state differs, push again? server toggle is idempotent-ish;
-          // we rely on outbox merge later. Mark synced.
-          const pending = await store.pendingOutbox();
-          const last = pending[pending.length - 1];
-          if (last) await store.markOutboxSynced(last.id);
-        } catch {
-          // queued
-        }
-        await refreshPending();
-      }
+      const payload = JSON.stringify({ wordId: word.id });
+      await enqueueAndTryPush(
+        "favorite",
+        op,
+        payload,
+        session
+          ? () =>
+              apiFetch(
+                "/api/dictionary/favorites",
+                { method: "POST", body: JSON.stringify({ wordId: word.id }) },
+                session
+              )
+          : undefined
+      );
     }
   };
 
   const pushHistory = (word: WordRow) => {
     if (store) {
       store.addHistory(word.id, new Date().toISOString()).catch(() => {});
-      if (session) {
-        apiFetch("/api/dictionary/history", { method: "POST", body: JSON.stringify({ wordId: word.id }) }, session).catch(() => {});
-      } else {
-        store.addOutbox("history", "history.view", JSON.stringify({ wordId: word.id })).then(refreshPending).catch(() => {});
-      }
+      const payload = JSON.stringify({ wordId: word.id });
+      // Siempre encolar: ante fallo de red el historial queda pendiente y se
+      // reintenta en el próximo flush (no se pierde entre dispositivos).
+      // Con sesión se empuja directo como aceleración best-effort; si el
+      // servidor responde ok, la entrada queda marcada como sincronizada.
+      void enqueueAndTryPush(
+        "history",
+        "history.view",
+        payload,
+        session
+          ? () =>
+              apiFetch(
+                "/api/dictionary/history",
+                { method: "POST", body: payload },
+                session
+              )
+          : undefined
+      ).catch(() => {});
     }
     setHistoryIds((prev) => [word.id, ...prev.filter((x) => x !== word.id)].slice(0, 50));
   };
