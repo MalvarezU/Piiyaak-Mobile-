@@ -78,14 +78,14 @@ describe("Juegos (hub)", () => {
 
     expect(await screen.findByText("Requiere audios")).toBeTruthy();
     expect(
-      screen.getByText("Necesita al menos 8 palabras con audio publicado.")
+      screen.getByText("Necesita al menos 4 palabras con audio publicado.")
     ).toBeTruthy();
   });
 
-  it("habilita Escucha cuando hay 8 palabras con audio", async () => {
+  it("habilita Escucha cuando hay 4 palabras con audio", async () => {
     const store = new MemoryWordStore();
     await store.upsertWords(
-      Array.from({ length: 8 }, (_, i) => palabraConAudio(`a${i}`))
+      Array.from({ length: 4 }, (_, i) => palabraConAudio(`a${i}`))
     );
     setDbDouble({ store });
 

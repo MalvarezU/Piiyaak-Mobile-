@@ -424,10 +424,9 @@ describe("syncCourses reconcilia módulos y lecciones", () => {
     expect(await store.listCourseIds()).toEqual(["c1"]);
     expect(await store.listModuleIds("c1")).toEqual(["m1"]);
     expect(await store.listLessonIds("m1")).toEqual(["l1"]);
-    // OJO: los contadores se acumulan por aparición en la lista remota, así
-    // que un curso repetido los infla aunque el contenido local no se
-    // duplique. Ver informe: src/db/sync-courses.ts:88-113 y 152.
-    expect(res).toEqual({ courses: 2, modules: 2, lessons: 2 });
+    // El store deduplica por id (upsert): una sola fila por curso, y los
+    // contadores reflejan los únicos.
+    expect(res).toEqual({ courses: 1, modules: 1, lessons: 1 });
   });
 });
 

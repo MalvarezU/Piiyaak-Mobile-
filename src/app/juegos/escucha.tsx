@@ -8,8 +8,9 @@ import { Screen, ThemedText, Card, Button } from "../../components/ui";
 import type { WordRow } from "../../db/types";
 import { createAudioPlayer } from "../../audio-player";
 import { resolveAudioUri } from "../../audio";
+import { MIN_AUDIO_WORDS } from "./constants";
 
-const MIN = 4;
+const MIN = MIN_AUDIO_WORDS;
 const MAX_ROUNDS = 8;
 
 function shuffle<T>(arr: T[]): T[] {

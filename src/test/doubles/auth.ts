@@ -1,22 +1,19 @@
 import { jest } from "@jest/globals";
+import type { SessionState as ApiSessionState } from "../../api";
 
 /**
- * Doble de `useAuth()` para tests de pantallas.
- *
- * Mismo patrón que `db-context`: el test mockea el módulo `auth` y delega acá.
+ * Re-exporta el tipo real de sesión de producción para que los consumidores
+ * del doble usen la misma forma (`{ cookie, user }`).
  */
-
-export interface SessionState {
-  token: string;
-  email: string;
-  name?: string | null;
-}
+export type SessionState = ApiSessionState;
 
 export interface AuthDouble {
   session: SessionState | null;
   ready: boolean;
-  login: jest.Mock<(email: string, password: string) => Promise<void>>;
-  register: jest.Mock<(email: string, password: string, name?: string) => Promise<void>>;
+  login: jest.Mock<(email: string, password: string) => Promise<boolean>>;
+  register: jest.Mock<
+    (email: string, password: string, name?: string) => Promise<{ ok: boolean; message: string }>
+  >;
   logout: jest.Mock<() => void>;
 }
 
@@ -26,8 +23,8 @@ export function createAuthDouble(overrides: Partial<AuthDouble> = {}): AuthDoubl
   return {
     session: null,
     ready: true,
-    login: jest.fn(async () => undefined),
-    register: jest.fn(async () => undefined),
+    login: jest.fn(async () => true),
+    register: jest.fn(async () => ({ ok: false, message: "" })),
     logout: jest.fn(() => undefined),
     ...overrides,
   };

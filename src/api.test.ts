@@ -496,9 +496,9 @@ describe("resetRequest", () => {
       )
     );
     const res = await resetRequest("token123", "nueva-clave");
-    // El catch del cliente absorbe el parseo y reporta el fallo genérico.
+    // El parseo fallido se reporta como respuesta inválida, no como error de red.
     expect(res.ok).toBe(false);
-    expect(res.message).toBe("Error de conexión.");
+    expect(res.message).toBe("Respuesta inválida del servidor.");
   });
 
   it("informa el error de conexión cuando la red falla", async () => {

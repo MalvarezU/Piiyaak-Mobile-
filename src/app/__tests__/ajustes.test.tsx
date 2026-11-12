@@ -29,8 +29,7 @@ jest.mock("../../auth", () => {
 import Ajustes from "../ajustes";
 import { setDbDouble } from "../../test/doubles/db-context";
 import { setAuthDouble } from "../../test/doubles/auth";
-import type { SessionState as SessionStateDouble } from "../../test/doubles/auth";
-import type { SessionState as SessionStateApi } from "../../api";
+import type { SessionState } from "../../api";
 
 // Las pantallas RN con cobertura de istanbul corren más lento: margen para el timeout por test.
 jest.setTimeout(30_000);
@@ -179,11 +178,7 @@ describe("Ajustes con la UI de cuenta habilitada", () => {
 
   it("avisa el error cuando el login falla", async () => {
     const auth = setAuthDouble({ session: null });
-    // El doble tipa `login` como `Promise<void>`, pero producción devuelve
-    // `Promise<boolean>` (el booleano decide si se muestra el error).
-    const login = auth.login as unknown as jest.Mock<
-      (email: string, password: string) => Promise<boolean>
-    >;
+    const login = auth.login;
     login.mockResolvedValue(false);
 
     render(<Ajustes />);
@@ -200,15 +195,12 @@ describe("Ajustes con la UI de cuenta habilitada", () => {
   });
 
   it("muestra la sesión activa y permite cerrar sesión", async () => {
-    // La pantalla usa la forma de sesión de producción (`api.SessionState`:
-    // `{ cookie, user }`), que no es la que declara el doble de auth
-    // (`{ token, email }`). Se pasa la forma real con un cast explícito.
-    const sesion: SessionStateApi = {
+    const sesion: SessionState = {
       cookie: "session=abc",
       user: { id: "u1", email: "ana@piiyaak.app", name: "Ana", role: "user" },
     };
     const auth = setAuthDouble({
-      session: sesion as unknown as SessionStateDouble,
+      session: sesion,
     });
 
     render(<Ajustes />);

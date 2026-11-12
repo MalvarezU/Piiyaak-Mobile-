@@ -183,7 +183,12 @@ export async function resetRequest(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),
     });
-    const body = (await res.json()) as { ok?: boolean; message?: string };
+    let body: { ok?: boolean; message?: string } = {};
+    try {
+      body = (await res.json()) as { ok?: boolean; message?: string };
+    } catch {
+      return { ok: false, message: "Respuesta inválida del servidor." };
+    }
     if (res.ok && body.ok) {
       return { ok: true, message: "Contraseña actualizada. Ya puedes entrar." };
     }

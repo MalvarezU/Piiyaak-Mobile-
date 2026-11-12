@@ -10,6 +10,7 @@ import { ScrollView, View, StyleSheet } from "react-native";
 import { ArrowRight, Headphones, Link2, ListChecks, PencilLine, Puzzle } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
+import { MIN_AUDIO_WORDS } from "./constants";
 import { theme, type, fonts, spacing, radiusScale } from "../../theme";
 import { Screen, ThemedText, Card, Chip } from "../../components/ui";
 
@@ -26,7 +27,7 @@ const GAMES = [
     icon: Headphones,
     locked: true,
     lockedBadge: "Requiere audios",
-    lockedNote: "Necesita al menos 8 palabras con audio publicado.",
+    lockedNote: "Necesita al menos 4 palabras con audio publicado.",
   },
 ] as const;
 
@@ -62,7 +63,7 @@ export default function JuegosHub() {
         </View>
         <View style={styles.tiles}>
           {GAMES.map((g) => {
-            const locked = g.id === "escucha" ? audioCount < 8 : false;
+            const locked = g.id === "escucha" ? audioCount < MIN_AUDIO_WORDS : false;
             if (locked) {
               return (
                 <Card key={g.id} accessibilityRole="button" accessibilityLabel={g.title}>

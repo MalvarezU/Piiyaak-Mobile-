@@ -56,8 +56,17 @@ export async function syncCourses(
   const body = (await res.json()) as { courses: RemoteCourseSummary[] };
 
   // Fase 1: descarga a memoria, sin tocar el store.
+  // Deduplicar cursos por id: el backend puede repetir entradas y el store
+  // hace upsert, así que contar apariciones infla los contadores.
+  const seenCourseIds = new Set<string>();
+  const courses = body.courses.filter((c) => {
+    if (seenCourseIds.has(c.id)) return false;
+    seenCourseIds.add(c.id);
+    return true;
+  });
+
   const trees = new Map<string, RemoteDetail["course"]["modules"]>();
-  for (const c of body.courses) {
+  for (const c of courses) {
     const detailRes = await apiFetch(`/api/courses/${c.id}`, {}, session);
     if (!detailRes.ok) throw new Error(`course ${c.id} ${detailRes.status}`);
     const detail = (await detailRes.json()) as RemoteDetail;
@@ -68,12 +77,12 @@ export async function syncCourses(
   let modCount = 0;
   let lesCount = 0;
   await store.runInTransaction(async () => {
-    const remoteCourseIds = new Set(body.courses.map((c) => c.id));
+    const remoteCourseIds = new Set(courses.map((c) => c.id));
     const remoteModuleIds = new Map<string, Set<string>>();
     const remoteLessonIds = new Map<string, Set<string>>();
     const allRemoteLessonIds = new Set<string>();
 
-    for (const c of body.courses) {
+    for (const c of courses) {
       const courseRow: CourseRow = {
         id: c.id,
         title: c.title,
@@ -95,7 +104,6 @@ export async function syncCourses(
         };
         await store.upsertModule(moduleRow);
         moduleIds.add(m.id);
-        modCount++;
         const lessonIds = new Set<string>();
         for (const l of m.lessons) {
           const lessonRow: LessonRow = {
@@ -109,11 +117,12 @@ export async function syncCourses(
           await store.upsertLesson(lessonRow);
           lessonIds.add(l.id);
           allRemoteLessonIds.add(l.id);
-          lesCount++;
         }
         remoteLessonIds.set(m.id, lessonIds);
+        lesCount += lessonIds.size;
       }
       remoteModuleIds.set(c.id, moduleIds);
+      modCount += moduleIds.size;
     }
 
     // Reconciliación de bajas dentro de la misma tx (nunca antes).
@@ -149,7 +158,7 @@ export async function syncCourses(
     }
   });
 
-  return { courses: body.courses.length, modules: modCount, lessons: lesCount };
+  return { courses: courses.length, modules: modCount, lessons: lesCount };
 }
 
 /** Drena el outbox de progreso de cursos al servidor. */
