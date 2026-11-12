@@ -317,7 +317,7 @@ describe("SQLiteWordStore.upsertWords", () => {
     expect((await store.listAZ()).map((w) => w.id)).toEqual(["w1", "w2", "w3"]);
   });
 
-  it.fails("no persiste la columna status: una palabra DRAFT queda visible", async () => {
+  it("no persiste la columna status: una palabra DRAFT queda visible", async () => {
     // FALLO DE PRODUCCIÓN (src/db/sqlite-store.ts:193-201) — ver informe bug #1.
     // El `INSERT ... ON CONFLICT` no incluye la columna `status` en la lista
     // de columnas ni en el `DO UPDATE SET`, así que el valor nunca llega a la
@@ -492,7 +492,7 @@ describe("SQLiteWordStore.listAZ", () => {
     expect((await store.listAZ(null, 2, 1)).map((w) => w.id)).toEqual(["w2", "w3"]);
   });
 
-  it.fails("ordena las palabras con el criterio de español, no con el binario de SQLite", async () => {
+  it("ordena las palabras con el criterio de español, no con el binario de SQLite", async () => {
     // FALLO DE PRODUCCIÓN (src/db/sqlite-store.ts:232 y :237) — ver informe bug #3.
     // `ORDER BY spanish` usa la collation BINARY de SQLite: los caracteres
     // acentuados (á, é, ñ) se comparan por su byte UTF-8 y quedan AL FINAL,

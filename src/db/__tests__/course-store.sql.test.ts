@@ -224,7 +224,7 @@ describe("SQLiteCourseStore.upsertModule", () => {
     expect(modulos[0]).toMatchObject({ title: "Nuevo", order: 5 });
   });
 
-  it.fails("no reasigna el courseId cuando el módulo ya existe", async () => {
+  it("no reasigna el courseId cuando el módulo ya existe", async () => {
     // FALLO DE PRODUCCIÓN (src/db/course-store.ts:57-58) — ver informe bug #2.
     // El `ON CONFLICT(id) DO UPDATE SET` actualiza `title` y `"order"` pero no
     // `courseId`. `MemoryCourseStore.upsertModule` sí reasigna el objeto
@@ -289,7 +289,7 @@ describe("SQLiteCourseStore.upsertLesson", () => {
     expect(await store.listLessonIds("m1")).toEqual(["l1"]);
   });
 
-  it.fails("no reasigna el moduleId cuando la lección ya existe", async () => {
+  it("no reasigna el moduleId cuando la lección ya existe", async () => {
     // FALLO DE PRODUCCIÓN (src/db/course-store.ts:65-66) — ver informe bug #2.
     // El `ON CONFLICT(id) DO UPDATE SET` no incluye `moduleId`, a diferencia de
     // `MemoryCourseStore.upsertLesson` que reemplaza la fila entera.

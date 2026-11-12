@@ -55,7 +55,7 @@ export class SQLiteCourseStore implements CourseStore {
   async upsertModule(mod: ModuleRow): Promise<void> {
     await this.db.runAsync(
       `INSERT INTO modules (id, courseId, title, "order") VALUES (?,?,?,?)
-       ON CONFLICT(id) DO UPDATE SET title=excluded.title, "order"=excluded."order"`,
+       ON CONFLICT(id) DO UPDATE SET title=excluded.title, "order"=excluded."order", courseId=excluded.courseId`,
       [mod.id, mod.courseId, mod.title, mod.order]
     );
   }
@@ -63,7 +63,7 @@ export class SQLiteCourseStore implements CourseStore {
   async upsertLesson(lesson: LessonRow): Promise<void> {
     await this.db.runAsync(
       `INSERT INTO lessons (id, moduleId, title, "order", lessonNumber, content) VALUES (?,?,?,?,?,?)
-       ON CONFLICT(id) DO UPDATE SET title=excluded.title, "order"=excluded."order", lessonNumber=excluded.lessonNumber, content=excluded.content`,
+       ON CONFLICT(id) DO UPDATE SET title=excluded.title, "order"=excluded."order", lessonNumber=excluded.lessonNumber, content=excluded.content, moduleId=excluded.moduleId`,
       [lesson.id, lesson.moduleId, lesson.title, lesson.order, lesson.lessonNumber, lesson.content]
     );
   }

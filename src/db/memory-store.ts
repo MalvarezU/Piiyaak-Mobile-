@@ -22,6 +22,7 @@ export class MemoryWordStore implements WordStore {
         ...w,
         audioUrl: w.audioUrl ?? existing?.audioUrl ?? null,
         illustrationUrl: w.illustrationUrl ?? existing?.illustrationUrl ?? null,
+        status: (w.status ?? existing?.status ?? null) as WordRow["status"],
       });
     }
   }

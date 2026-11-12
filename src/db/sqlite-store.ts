@@ -174,7 +174,7 @@ export class SQLiteWordStore implements WordStore {
 
   async upsertWords(rows: WordRow[]): Promise<void> {
     if (rows.length === 0) return;
-    const placeholders = rows.map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)").join(",");
+    const placeholders = rows.map(() => "(?,?,?,?,?,?,?,?,?,?,?,?,?)").join(",");
     const params = rows.flatMap((w) => [
       w.id,
       w.spanish,
@@ -188,9 +188,10 @@ export class SQLiteWordStore implements WordStore {
       w.updatedAt,
       normalize(w.spanish),
       normalize(w.nasaYuwe),
+      w.status ?? null,
     ]);
     await this.db.runAsync(
-      `INSERT INTO words (id, spanish, nasaYuwe, pronunciation, audioUrl, illustrationUrl, culturalContext, category, examples, updatedAt, spanish_norm, nasaYuwe_norm)
+      `INSERT INTO words (id, spanish, nasaYuwe, pronunciation, audioUrl, illustrationUrl, culturalContext, category, examples, updatedAt, spanish_norm, nasaYuwe_norm, status)
        VALUES ${placeholders}
        ON CONFLICT(id) DO UPDATE SET
          spanish=excluded.spanish, nasaYuwe=excluded.nasaYuwe,
@@ -198,7 +199,8 @@ export class SQLiteWordStore implements WordStore {
          illustrationUrl=COALESCE(NULLIF(excluded.illustrationUrl, ''), illustrationUrl),
          culturalContext=excluded.culturalContext, category=excluded.category,
          examples=excluded.examples, updatedAt=excluded.updatedAt,
-         spanish_norm=excluded.spanish_norm, nasaYuwe_norm=excluded.nasaYuwe_norm`,
+         spanish_norm=excluded.spanish_norm, nasaYuwe_norm=excluded.nasaYuwe_norm,
+         status=COALESCE(excluded.status, words.status)`,
       params
     );
   }
@@ -229,12 +231,12 @@ export class SQLiteWordStore implements WordStore {
   async listAZ(category: string | null = null, limit = 50, offset = 0): Promise<WordRow[]> {
     if (category) {
       return this.db.getAllAsync<WordRow>(
-        "SELECT * FROM words WHERE category = ? AND (status IS NULL OR status != 'DRAFT') ORDER BY spanish LIMIT ? OFFSET ?",
+        "SELECT * FROM words WHERE category = ? AND (status IS NULL OR status != 'DRAFT') ORDER BY spanish_norm LIMIT ? OFFSET ?",
         [category, limit, offset]
       );
     }
     return this.db.getAllAsync<WordRow>(
-      "SELECT * FROM words WHERE (status IS NULL OR status != 'DRAFT') ORDER BY spanish LIMIT ? OFFSET ?",
+      "SELECT * FROM words WHERE (status IS NULL OR status != 'DRAFT') ORDER BY spanish_norm LIMIT ? OFFSET ?",
       [limit, offset]
     );
   }
