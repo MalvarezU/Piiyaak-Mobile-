@@ -91,4 +91,11 @@ describe("Explorar (pantalla)", () => {
     expect(screen.queryByText("agua")).toBeNull();
     expect(screen.getByText("casa")).toBeTruthy();
   });
+
+  it("no usa fondo fotográfico (crema intacta)", async () => {
+    render(<Explorar />);
+    await screen.findByText("agua");
+
+    expect(screen.queryByTestId("screen-background")).toBeNull();
+  });
 });

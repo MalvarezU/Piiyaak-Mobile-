@@ -45,6 +45,11 @@ const MODULES = [
   { title: "Cursos", icon: GraduationCap, href: "/cursos" },
 ] as const;
 
+/** Fondo fotográfico del home: tarjeta compuesta (blur-fill + nítida). */
+const HOME_BACKGROUND = {
+  source: require("../../assets/images/encuentro-nasa-yuwe.jpg"),
+};
+
 export default function Inicio() {
   const { store, ready, sync, lastSync, seedState, retrySeed, continueTextOnly, updateAvailable, acceptUpdate, dismissUpdate } = useDb();
   const router = useRouter();
@@ -121,7 +126,7 @@ export default function Inicio() {
   const queryActive = q.trim().length >= 2;
 
   return (
-    <Screen>
+    <Screen background={HOME_BACKGROUND}>
       <KeyboardAvoidingView
         style={styles.avoider}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -133,6 +138,7 @@ export default function Inicio() {
             onClear={handleClear}
             onCancel={handleCancel}
             searchMode={searchMode}
+            onPhoto
           />
         </View>
         {updateAvailable ? (
@@ -152,7 +158,7 @@ export default function Inicio() {
           </View>
         ) : !ready ? (
           <View style={styles.notices}>
-            <ThemedText variant="body" style={styles.muted}>
+            <ThemedText variant="body" style={[styles.muted, styles.onPhoto]}>
               Preparando diccionario offline...
             </ThemedText>
           </View>
@@ -164,7 +170,7 @@ export default function Inicio() {
           {suggested.length > 0 ? (
             <Reveal delay={0}>
               <View>
-                <ThemedText variant="caption" style={styles.wodLabel}>
+                <ThemedText variant="caption" style={[styles.wodLabel, styles.onPhoto]}>
                   Palabras sugeridas
                 </ThemedText>
                 <SuggestedWordsCarousel
@@ -201,12 +207,12 @@ export default function Inicio() {
             queryActive ? (
               isSearching ? (
                 <View style={styles.status}>
-                  <ThemedText variant="body" style={styles.muted}>
+                  <ThemedText variant="body" style={[styles.muted, styles.onPhoto]}>
                     Buscando…
                   </ThemedText>
                 </View>
               ) : results.length === 0 ? (
-                <EmptyState message="Sin resultados" icon="🔍" />
+                <EmptyState message="Sin resultados" icon="🔍" tone="onPhoto" />
               ) : null
             ) : null
           }
@@ -261,6 +267,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   muted: { color: theme.muted, textAlign: "center" },
+  onPhoto: { color: theme.onTint },
   list: { flex: 1 },
   listContent: {
     flexGrow: 1,

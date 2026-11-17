@@ -20,6 +20,11 @@ export interface SearchFieldProps {
   onCancel: () => void;
   /** Hay texto: se muestra el botón Cancelar. */
   searchMode: boolean;
+  /**
+   * Sobre foto de fondo: solo "Cancelar" pasa a crema de contraste (vive
+   * fuera del campo). Search/X no cambian (viven dentro del campo blanco).
+   */
+  onPhoto?: boolean;
 }
 
 export function SearchField({
@@ -28,6 +33,7 @@ export function SearchField({
   onClear,
   onCancel,
   searchMode,
+  onPhoto = false,
 }: SearchFieldProps) {
   return (
     <View style={styles.row}>
@@ -63,7 +69,7 @@ export function SearchField({
           hitSlop={8}
           style={styles.cancel}
         >
-          <ThemedText variant="label" style={styles.cancelText}>
+          <ThemedText variant="label" style={[styles.cancelText, onPhoto ? styles.cancelTextOnPhoto : null]}>
             Cancelar
           </ThemedText>
         </Pressable>
@@ -94,4 +100,5 @@ const styles = StyleSheet.create({
   clear: { padding: spacing.xs },
   cancel: { minHeight: minHit, justifyContent: "center" },
   cancelText: { color: theme.primary },
+  cancelTextOnPhoto: { color: theme.onTint },
 });

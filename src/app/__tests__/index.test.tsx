@@ -224,7 +224,13 @@ describe("Inicio (pantalla)", () => {
     expect(screen.queryByText("Cancelar")).toBeNull();
   });
 
-  it("el label usa el color de texto por defecto (sin foto de fondo)", async () => {
+  it("renderiza el fondo fotográfico a cover", async () => {
+    await montarInicio();
+
+    expect(screen.getByTestId("screen-background").props.resizeMode).toBe("cover");
+  });
+
+  it("el label Palabras sugeridas usa crema de contraste sobre la foto", async () => {
     mockLoadSuggestedWords.mockImplementation(async () => [
       makeWord({ id: "w2", spanish: "agua", nasaYuwe: "mü", category: "agua", status: "PUBLISHED" }),
     ]);
@@ -232,10 +238,10 @@ describe("Inicio (pantalla)", () => {
 
     expect(
       StyleSheet.flatten(screen.getByText("Palabras sugeridas").props.style)
-    ).not.toMatchObject({ color: theme.onTint });
+    ).toMatchObject({ color: theme.onTint });
   });
 
-  it("Buscando… y Sin resultados usan color por defecto sobre crema", async () => {
+  it("Buscando… y Sin resultados usan crema de contraste sobre la foto", async () => {
     await montarInicio();
 
     const user = userEvent.setup();
@@ -243,10 +249,10 @@ describe("Inicio (pantalla)", () => {
 
     expect(
       StyleSheet.flatten(screen.getByText("Buscando…").props.style)
-    ).not.toMatchObject({ color: theme.onTint });
+    ).toMatchObject({ color: theme.onTint });
     expect(await screen.findByText("Sin resultados")).toBeTruthy();
     expect(
       StyleSheet.flatten(screen.getByText("Sin resultados").props.style)
-    ).not.toMatchObject({ color: theme.onTint });
+    ).toMatchObject({ color: theme.onTint });
   });
 });
