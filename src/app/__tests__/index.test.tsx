@@ -11,14 +11,13 @@ jest.mock("lucide-react-native", () => mockLucide);
 // El kit de motion usa reanimated: en Node no hay worklets nativos.
 jest.mock("react-native-reanimated", () => mockReanimated);
 
-/** La palabra del día se resuelve contra el backend: en tests es un doble. */
-const mockLoadWordOfDay = jest.fn(
-  async (_store: unknown, _date: string, _session: unknown): Promise<WordRow | null> =>
-    null
+/** Las palabras sugeridas se resuelven localmente: en tests es un doble. */
+const mockLoadSuggestedWords = jest.fn(
+  async (_store: unknown, _date: string, _session?: unknown): Promise<WordRow[]> => []
 );
-jest.mock("../../db/word-of-day", () => ({
-  loadWordOfDay: (store: unknown, date: string, session: unknown) =>
-    mockLoadWordOfDay(store, date, session),
+jest.mock("../../db/suggested-words", () => ({
+  loadSuggestedWords: (store: unknown, date: string, session?: unknown) =>
+    mockLoadSuggestedWords(store, date, session),
 }));
 
 const mockRouter = {
@@ -69,7 +68,7 @@ describe("Inicio (pantalla)", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockLoadWordOfDay.mockImplementation(async () => null);
+    mockLoadSuggestedWords.mockImplementation(async () => []);
     store = new MemoryWordStore();
     await store.upsertWords([
       makeWord({ id: "w1", spanish: "casa", nasaYuwe: "tsa", category: "hogar" }),
@@ -106,14 +105,14 @@ describe("Inicio (pantalla)", () => {
     expect(await screen.findByText("Sin resultados")).toBeTruthy();
   });
 
-  it("muestra la palabra del día cuando el backend la resuelve", async () => {
-    mockLoadWordOfDay.mockImplementation(async () =>
-      makeWord({ id: "w2", spanish: "agua", nasaYuwe: "mü", category: "agua" })
-    );
+  it("muestra las palabras sugeridas cuando el store las resuelve", async () => {
+    mockLoadSuggestedWords.mockImplementation(async () => [
+      makeWord({ id: "w2", spanish: "agua", nasaYuwe: "mü", category: "agua", status: "PUBLISHED" }),
+    ]);
 
     await montarInicio();
 
-    expect(await screen.findByText("Palabra del día")).toBeTruthy();
+    expect(await screen.findByText("Palabras sugeridas")).toBeTruthy();
     expect(screen.getByText("mü")).toBeTruthy();
   });
 

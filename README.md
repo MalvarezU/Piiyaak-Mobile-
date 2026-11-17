@@ -23,6 +23,22 @@ npm install
 npx tsc --noEmit   # tipos
 npx vitest run     # lógica (sync, store, ranking)
 npx expo start     # desarrollo (requiere Expo Go o emulador)
+
+## Desarrollo por USB (recomendado)
+
+La app NO se ejecuta bien vía URL `exp://192.168.x.x:PORT` en Expo Go (incompatibilidad /
+problemas de red). Usar depuración USB conectada al PC:
+
+1. Activar "Depuración USB" (y "Instalar por USB" en MIUI/HyperOS) en el celular.
+2. `adb devices` → confirmar el equipo.
+3. `adb reverse tcp:8081 tcp:8081` (o el puerto de Metro).
+4. `npx expo start --dev-client` (Metro en 8081).
+5. `adb shell am start -a android.intent.action.VIEW -d "exp+piiyaak://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"`.
+
+Si el APK de desarrollo no está instalado (firma distinta a la build de producción),
+desinstalar `com.piiyaak.app` y reinstalar el `.apk` debug generado por
+`npx expo run:android --device <modelo>`. Requiere `JAVA_HOME=/usr/lib/jvm/java-21-openjdk`
+(si el shell apunta a una ruta de Android Studio inexistente).
 ```
 
 ## Pendiente (requiere dispositivos/cuentas)

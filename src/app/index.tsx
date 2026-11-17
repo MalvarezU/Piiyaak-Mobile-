@@ -8,15 +8,15 @@ import { FlatList, RefreshControl, TextInput, View, StyleSheet } from "react-nat
 import { BookOpen, Gamepad2, GraduationCap, Search } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { theme, fonts, type, radiusScale, spacing, minHit } from "../theme";
-import { Screen, ThemedText, Card, Chip } from "../components/ui";
+import { Screen, ThemedText, Card } from "../components/ui";
 import { useDb } from "../db-context";
-import { useAuth } from "../auth";
 import { EmptyState } from "../components/empty-state";
 import { SeedProgress } from "../components/seed-progress";
 import { Reveal } from "../components/motion";
 import { UpdateNotice } from "../components/update-notice";
 import type { WordRow } from "../db/types";
-import { loadWordOfDay } from "../db/word-of-day";
+import { loadSuggestedWords } from "../db/suggested-words";
+import { SuggestedWordsCarousel } from "../components/suggested-words-carousel";
 
 /** Módulos del home: ícono lucide + ruta del Tab correspondiente. */
 const MODULES = [
@@ -27,11 +27,10 @@ const MODULES = [
 
 export default function Inicio() {
   const { store, ready, sync, lastSync, seedState, retrySeed, continueTextOnly, updateAvailable, acceptUpdate, dismissUpdate } = useDb();
-  const { session } = useAuth();
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<WordRow[]>([]);
-  const [wod, setWod] = useState<WordRow | null>(null);
+  const [suggested, setSuggested] = useState<WordRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -50,25 +49,25 @@ export default function Inicio() {
     };
   }, [q, store]);
 
-  // Palabra del día (cacheada por fecha en kv; anónima desde B1).
+  // Palabras sugeridas (cálculo local, determinista por fecha).
   // Se re-resuelve cuando cambia lastSync: tras un sync el vocabulario
-  // puede traer ids nuevos y el wodId cacheado queda huérfano.
+  // puede traer ids nuevos.
   useEffect(() => {
     let alive = true;
     (async () => {
       if (!store) return;
       const today = new Date().toISOString().slice(0, 10);
       try {
-        const w = await loadWordOfDay(store, today, session);
-        if (alive) setWod(w);
+        const words = await loadSuggestedWords(store, today);
+        if (alive) setSuggested(words);
       } catch {
-        // offline sin caché: no hay palabra del día
+        // offline sin caché: no hay palabras sugeridas
       }
     })();
     return () => {
       alive = false;
     };
-  }, [store, session, lastSync]);
+  }, [store, lastSync]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -82,20 +81,17 @@ export default function Inicio() {
   return (
     <Screen>
       <View style={styles.content}>
-        {wod ? (
+        {suggested.length > 0 ? (
           <Reveal delay={0}>
-            <Card onPress={() => router.push({ pathname: "/ficha/[id]", params: { id: wod.id } })}>
-              <View style={styles.wodBody}>
-                <ThemedText variant="caption" style={styles.wodLabel}>
-                  Palabra del día
-                </ThemedText>
-                <ThemedText variant="word">{wod.nasaYuwe}</ThemedText>
-                <ThemedText variant="body" style={styles.wodSpanish}>
-                  {wod.spanish}
-                </ThemedText>
-                {wod.category ? <Chip label={wod.category} tone="accent" /> : null}
-              </View>
-            </Card>
+            <View>
+              <ThemedText variant="caption" style={styles.wodLabel}>
+                Palabras sugeridas
+              </ThemedText>
+              <SuggestedWordsCarousel
+                words={suggested}
+                onPressWord={(id) => router.push({ pathname: "/ficha/[id]", params: { id } })}
+              />
+            </View>
           </Reveal>
         ) : null}
         {updateAvailable ? (
