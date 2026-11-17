@@ -1,9 +1,11 @@
 import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import { render, screen, userEvent, act } from "@testing-library/react-native";
 import type { ReactNode } from "react";
+import { StyleSheet } from "react-native";
 import { MemoryWordStore } from "../../db/memory-store";
 import { makeWord } from "../../test/fixtures/words";
 import type { WordRow } from "../../db/types";
+import { theme } from "../../theme";
 import { mockLucide, mockReanimated } from "./_test-utils";
 
 jest.mock("lucide-react-native", () => mockLucide);
@@ -57,6 +59,30 @@ async function montarInicio() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+/**
+ * Orden de aparición en el árbol renderizado: sirve para afirmar que el
+ * input queda arriba y los resultados debajo en modo búsqueda.
+ */
+function ordenAparicion(): string[] {
+  const out: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (typeof node === "string") {
+      out.push(node);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const n = node as { props?: { testID?: string }; children?: unknown };
+    if (typeof n.props?.testID === "string") out.push(n.props.testID);
+    if (n.children) walk(n.children);
+  };
+  walk(screen.toJSON());
+  return out;
 }
 
 /**
@@ -131,5 +157,96 @@ describe("Inicio (pantalla)", () => {
     await user.press(screen.getByText("Cursos"));
 
     expect(mockRouter.push).toHaveBeenCalledWith("/cursos");
+  });
+
+  it("oculta el home y lista resultados debajo del input al buscar", async () => {
+    await montarInicio();
+
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("Buscar palabra..."), "casa");
+
+    // El input nunca se desmonta: sigue arriba y visible.
+    expect(screen.getByPlaceholderText("Buscar palabra...")).toBeTruthy();
+    // Carrusel y tiles se ocultan con display none (no se desmontan).
+    expect(
+      StyleSheet.flatten(screen.getByTestId("home-sugeridas", { includeHiddenElements: true }).props.style)
+    ).toMatchObject({ display: "none" });
+    expect(
+      StyleSheet.flatten(screen.getByTestId("home-modulos", { includeHiddenElements: true }).props.style)
+    ).toMatchObject({ display: "none" });
+    // Acciones de modo búsqueda presentes.
+    expect(screen.getByLabelText("Limpiar búsqueda")).toBeTruthy();
+    expect(screen.getByText("Cancelar")).toBeTruthy();
+
+    // El resultado llega por debounce y queda debajo del input.
+    expect(await screen.findByText("casa")).toBeTruthy();
+    const orden = ordenAparicion();
+    expect(orden.indexOf("search-header")).toBeLessThan(orden.indexOf("casa"));
+  });
+
+  it("muestra Buscando… durante el debounce y Sin resultados solo al resolver vacía", async () => {
+    await montarInicio();
+
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("Buscar palabra..."), "zzz");
+
+    // Debounce en vuelo: todavía no resolvió, sin falso "Sin resultados".
+    expect(screen.getByText("Buscando…")).toBeTruthy();
+    expect(screen.queryByText("Sin resultados")).toBeNull();
+
+    // Resuelta vacía: aparece el vacío y se va el indicador.
+    expect(await screen.findByText("Sin resultados")).toBeTruthy();
+    expect(screen.queryByText("Buscando…")).toBeNull();
+  });
+
+  it("restaura el home completo al cancelar la búsqueda", async () => {
+    mockLoadSuggestedWords.mockImplementation(async () => [
+      makeWord({ id: "w2", spanish: "agua", nasaYuwe: "mü", category: "agua", status: "PUBLISHED" }),
+    ]);
+    await montarInicio();
+
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("Buscar palabra..."), "casa");
+    expect(await screen.findByText("casa")).toBeTruthy();
+
+    await user.press(screen.getByText("Cancelar"));
+
+    // Home completo de vuelta: bloques visibles, sin resultados ni Cancelar.
+    expect(
+      StyleSheet.flatten(screen.getByTestId("home-sugeridas", { includeHiddenElements: true }).props.style)
+    ).not.toMatchObject({ display: "none" });
+    expect(
+      StyleSheet.flatten(screen.getByTestId("home-modulos", { includeHiddenElements: true }).props.style)
+    ).not.toMatchObject({ display: "none" });
+    expect(screen.getByText("Palabras sugeridas")).toBeTruthy();
+    expect(screen.getByText("Cursos")).toBeTruthy();
+    expect(screen.queryByText("casa")).toBeNull();
+    expect(screen.queryByText("Cancelar")).toBeNull();
+  });
+
+  it("el label usa el color de texto por defecto (sin foto de fondo)", async () => {
+    mockLoadSuggestedWords.mockImplementation(async () => [
+      makeWord({ id: "w2", spanish: "agua", nasaYuwe: "mü", category: "agua", status: "PUBLISHED" }),
+    ]);
+    await montarInicio();
+
+    expect(
+      StyleSheet.flatten(screen.getByText("Palabras sugeridas").props.style)
+    ).not.toMatchObject({ color: theme.onTint });
+  });
+
+  it("Buscando… y Sin resultados usan color por defecto sobre crema", async () => {
+    await montarInicio();
+
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("Buscar palabra..."), "zzz");
+
+    expect(
+      StyleSheet.flatten(screen.getByText("Buscando…").props.style)
+    ).not.toMatchObject({ color: theme.onTint });
+    expect(await screen.findByText("Sin resultados")).toBeTruthy();
+    expect(
+      StyleSheet.flatten(screen.getByText("Sin resultados").props.style)
+    ).not.toMatchObject({ color: theme.onTint });
   });
 });

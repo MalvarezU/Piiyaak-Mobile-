@@ -1,19 +1,39 @@
 /**
- * Home de Piiyaak: palabra del día → avisos → módulos → búsqueda.
- * El rediseño es visual (kit base, src/components/ui); la lógica de
+ * Home de Piiyaak: búsqueda → avisos → sugeridas → módulos → resultados.
+ *
+ * Modo búsqueda: con texto en el campo, el carrusel de sugeridas y los
+ * tiles de módulos se ocultan con `display: "none"` (no se desmontan: el
+ * TextInput es único y permanente, así el teclado nunca se cierra solo).
+ * La FlatList de resultados es hermana del input dentro del mismo
+ * KeyboardAvoidingView, con flex:1: ocupa exactamente el espacio entre el
+ * input y el teclado. En Android el ajuste lo hace `adjustResize` (sin
+ * padding extra, que duplicaría el recorte); en iOS se usa
+ * behavior="padding" (iOS no redimensiona la ventana).
+ *
+ * UpdateNotice y SeedProgress quedan fuera del bloque ocultable: son
+ * estado crítico y siguen visibles mientras se busca. La lógica de
  * datos —debounce, palabra del día, sync, semilla, avisos— queda intacta.
  */
 import { useEffect, useState } from "react";
-import { FlatList, RefreshControl, TextInput, View, StyleSheet } from "react-native";
-import { BookOpen, Gamepad2, GraduationCap, Search } from "lucide-react-native";
+import {
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  View,
+  StyleSheet,
+} from "react-native";
+import { BookOpen, Gamepad2, GraduationCap } from "lucide-react-native";
 import { useRouter } from "expo-router";
-import { theme, fonts, type, radiusScale, spacing, minHit } from "../theme";
+import { theme, fonts, type, spacing } from "../theme";
 import { Screen, ThemedText, Card } from "../components/ui";
 import { useDb } from "../db-context";
 import { EmptyState } from "../components/empty-state";
 import { SeedProgress } from "../components/seed-progress";
 import { Reveal } from "../components/motion";
 import { UpdateNotice } from "../components/update-notice";
+import { SearchField } from "../components/search-field";
 import type { WordRow } from "../db/types";
 import { loadSuggestedWords } from "../db/suggested-words";
 import { SuggestedWordsCarousel } from "../components/suggested-words-carousel";
@@ -30,18 +50,28 @@ export default function Inicio() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<WordRow[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [suggested, setSuggested] = useState<WordRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Con texto hay modo búsqueda (oculta home, muestra lista). Con 2+
+  // caracteres además se consulta, con debounce de 250ms. `isSearching`
+  // distingue "consulta en vuelo" de "resolvió vacía" para no parpadear
+  // "Sin resultados" mientras se escribe.
   useEffect(() => {
     let alive = true;
     if (!store || q.trim().length < 2) {
       setResults([]);
+      setIsSearching(false);
       return;
     }
+    setIsSearching(true);
     const t = setTimeout(async () => {
       const r = await store.search(q.trim(), 20);
-      if (alive) setResults(r);
+      if (alive) {
+        setResults(r);
+        setIsSearching(false);
+      }
     }, 250);
     return () => {
       alive = false;
@@ -78,105 +108,151 @@ export default function Inicio() {
     }
   };
 
+  const handleClear = () => {
+    setQ("");
+  };
+
+  const handleCancel = () => {
+    setQ("");
+    Keyboard.dismiss();
+  };
+
+  const searchMode = q.trim().length > 0;
+  const queryActive = q.trim().length >= 2;
+
   return (
     <Screen>
-      <View style={styles.content}>
-        {suggested.length > 0 ? (
-          <Reveal delay={0}>
-            <View>
-              <ThemedText variant="caption" style={styles.wodLabel}>
-                Palabras sugeridas
-              </ThemedText>
-              <SuggestedWordsCarousel
-                words={suggested}
-                onPressWord={(id) => router.push({ pathname: "/ficha/[id]", params: { id } })}
-              />
-            </View>
-          </Reveal>
-        ) : null}
-        {updateAvailable ? (
-          <UpdateNotice
-            update={updateAvailable}
-            onDownload={() => {
-              void acceptUpdate();
-            }}
-            onLater={dismissUpdate}
-          />
-        ) : null}
-        {seedState ? (
-          <SeedProgress state={seedState} onRetry={retrySeed} onTextOnly={continueTextOnly} />
-        ) : !ready ? (
-          <ThemedText variant="body" style={styles.muted}>
-            Preparando diccionario offline...
-          </ThemedText>
-        ) : null}
-        <Reveal delay={80}>
-          <View style={styles.tiles}>
-            {MODULES.map((modulo) => (
-              <Card key={modulo.href} onPress={() => router.push(modulo.href)} style={styles.tile}>
-                <modulo.icon size={24} color={theme.primary} />
-                <ThemedText variant="label">{modulo.title}</ThemedText>
-              </Card>
-            ))}
-          </View>
-        </Reveal>
-        <View style={styles.search}>
-          <Search size={20} color={theme.muted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar palabra..."
-            placeholderTextColor={theme.muted}
+      <KeyboardAvoidingView
+        style={styles.avoider}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View testID="search-header" style={styles.searchHeader}>
+          <SearchField
             value={q}
             onChangeText={setQ}
-            autoCapitalize="none"
-            returnKeyType="search"
+            onClear={handleClear}
+            onCancel={handleCancel}
+            searchMode={searchMode}
           />
         </View>
-      </View>
-      {q.trim().length >= 2 && results.length === 0 ? (
-        <EmptyState message="Sin resultados" icon="🔍" />
-      ) : null}
-      <FlatList
-        data={results}
-        keyExtractor={(w) => w.id}
-        style={styles.list}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.montana}
-            colors={[theme.montana]}
-          />
-        }
-        renderItem={({ item }) => (
-          <Card onPress={() => router.push({ pathname: "/ficha/[id]", params: { id: item.id } })}>
-            <View style={styles.rowBody}>
-              <ThemedText variant="bodyMedium" style={styles.rowTitle}>
-                {item.spanish}
-              </ThemedText>
-              <ThemedText variant="body" style={styles.rowNy}>
-                {item.nasaYuwe}
-              </ThemedText>
-              {item.category ? <ThemedText variant="caption">{item.category}</ThemedText> : null}
+        {updateAvailable ? (
+          <View style={styles.notices}>
+            <UpdateNotice
+              update={updateAvailable}
+              onDownload={() => {
+                void acceptUpdate();
+              }}
+              onLater={dismissUpdate}
+            />
+          </View>
+        ) : null}
+        {seedState ? (
+          <View style={styles.notices}>
+            <SeedProgress state={seedState} onRetry={retrySeed} onTextOnly={continueTextOnly} />
+          </View>
+        ) : !ready ? (
+          <View style={styles.notices}>
+            <ThemedText variant="body" style={styles.muted}>
+              Preparando diccionario offline...
+            </ThemedText>
+          </View>
+        ) : null}
+        <View
+          testID="home-sugeridas"
+          style={[styles.homeBlock, searchMode ? styles.hidden : null]}
+        >
+          {suggested.length > 0 ? (
+            <Reveal delay={0}>
+              <View>
+                <ThemedText variant="caption" style={styles.wodLabel}>
+                  Palabras sugeridas
+                </ThemedText>
+                <SuggestedWordsCarousel
+                  words={suggested}
+                  onPressWord={(id) => router.push({ pathname: "/ficha/[id]", params: { id } })}
+                />
+              </View>
+            </Reveal>
+          ) : null}
+        </View>
+        <View
+          testID="home-modulos"
+          style={[styles.homeBlock, searchMode ? styles.hidden : null]}
+        >
+          <Reveal delay={80}>
+            <View style={styles.tiles}>
+              {MODULES.map((modulo) => (
+                <Card key={modulo.href} onPress={() => router.push(modulo.href)} style={styles.tile}>
+                  <modulo.icon size={24} color={theme.primary} />
+                  <ThemedText variant="label">{modulo.title}</ThemedText>
+                </Card>
+              ))}
             </View>
-          </Card>
-        )}
-      />
+          </Reveal>
+        </View>
+        <FlatList
+          testID="lista-resultados"
+          data={results}
+          keyExtractor={(w) => w.id}
+          style={styles.list}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            queryActive ? (
+              isSearching ? (
+                <View style={styles.status}>
+                  <ThemedText variant="body" style={styles.muted}>
+                    Buscando…
+                  </ThemedText>
+                </View>
+              ) : results.length === 0 ? (
+                <EmptyState message="Sin resultados" icon="🔍" />
+              ) : null
+            ) : null
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.montana}
+              colors={[theme.montana]}
+            />
+          }
+          renderItem={({ item }) => (
+            <Card onPress={() => router.push({ pathname: "/ficha/[id]", params: { id: item.id } })}>
+              <View style={styles.rowBody}>
+                <ThemedText variant="bodyMedium" style={styles.rowTitle}>
+                  {item.spanish}
+                </ThemedText>
+                <ThemedText variant="body" style={styles.rowNy}>
+                  {item.nasaYuwe}
+                </ThemedText>
+                {item.category ? <ThemedText variant="caption">{item.category}</ThemedText> : null}
+              </View>
+            </Card>
+          )}
+        />
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: spacing.md,
+  avoider: { flex: 1 },
+  searchHeader: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
   },
-  wodBody: { gap: spacing.xs, alignItems: "flex-start" },
+  notices: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  homeBlock: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  hidden: { display: "none" },
   wodLabel: { textTransform: "uppercase" },
-  wodSpanish: { color: theme.muted },
   tiles: { flexDirection: "row", gap: spacing.sm },
   tile: {
     flex: 1,
@@ -184,28 +260,19 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.md,
   },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    minHeight: minHit,
-    backgroundColor: theme.card,
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: radiusScale.full,
-    paddingHorizontal: spacing.md,
-  },
-  searchInput: {
-    ...type.body,
-    flex: 1,
-    textAlignVertical: "center",
-  },
   muted: { color: theme.muted, textAlign: "center" },
   list: { flex: 1 },
   listContent: {
+    flexGrow: 1,
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.lg,
+  },
+  status: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
   },
   rowBody: { gap: spacing.xs },
   rowTitle: {
