@@ -6,17 +6,8 @@ import { theme, spacing, radiusScale, shadows } from "../../theme";
 import { Screen, ThemedText, Button } from "../../components/ui";
 import type { WordRow } from "../../db/types";
 import { tokenizeOrdena, isOrdenaEligible } from "../../lib/ordena-tokenizer";
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = copy[i] as T;
-    copy[i] = copy[j] as T;
-    copy[j] = tmp;
-  }
-  return copy;
-}
+import { pickGameWords } from "../../lib/game-words";
+import { shuffle } from "../../lib/game-random";
 
 interface Tile {
   id: string;
@@ -36,13 +27,7 @@ export default function Ordena() {
   const [done, setDone] = useState(false);
   const TOTAL = 5;
 
-  const loadWord = async () => {
-    if (!store) return;
-    const all = await store.listRandom(50);
-    const eligible = (all as WordRow[]).filter((w) => isOrdenaEligible({ spanish: w.spanish, nasaYuwe: w.nasaYuwe }));
-    if (eligible.length === 0) return;
-    const w = shuffle(eligible)[0];
-    if (!w) return;
+  const startRound = (w: WordRow) => {
     const tokens = tokenizeOrdena(w.nasaYuwe);
     const tileList: Tile[] = tokens.map((t, i) => ({ id: `${w.id}-${i}`, text: t }));
     setWord(w);
@@ -50,6 +35,32 @@ export default function Ordena() {
     setPlaced([]);
     setChecked(false);
     setCorrect(null);
+  };
+
+  const loadWord = async () => {
+    if (!store) return;
+    // Pool con rotación (buffer `games:recent` compartido entre juegos).
+    // El recorte aleatorio puede no traer palabra elegible para "Ordena"
+    // (exige Nasa Yuwe de más de dos fichas): en ese caso se cae al camino
+    // legacy para que una mala jugada nunca deje la ronda en blanco.
+    const pool = await pickGameWords(store, { count: 6 });
+    const eligible = pool.filter((w) =>
+      isOrdenaEligible({ spanish: w.spanish, nasaYuwe: w.nasaYuwe })
+    );
+    // El pool llega pre-barajado: la primera elegible es la ronda.
+    const w = eligible[0];
+    if (w) {
+      startRound(w);
+      return;
+    }
+    const all = await store.listRandom(50);
+    const legacy = all.filter((w) =>
+      isOrdenaEligible({ spanish: w.spanish, nasaYuwe: w.nasaYuwe })
+    );
+    if (legacy.length === 0) return;
+    const fallback = shuffle(legacy)[0];
+    if (!fallback) return;
+    startRound(fallback);
   };
 
   useEffect(() => {

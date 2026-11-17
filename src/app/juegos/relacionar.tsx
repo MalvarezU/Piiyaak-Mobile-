@@ -3,19 +3,9 @@ import { View, StyleSheet, ScrollView } from "react-native";
 import { useDb } from "../../db-context";
 import { theme, fonts, spacing, minHit } from "../../theme";
 import { Screen, ThemedText, Card, Button, Chip } from "../../components/ui";
-import type { WordRow } from "../../db/types";
+import { pickGameWords } from "../../lib/game-words";
+import { shuffle } from "../../lib/game-random";
 import { RefreshCw, CheckCircle2, Link2 } from "lucide-react-native";
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = copy[i] as T;
-    copy[i] = copy[j] as T;
-    copy[j] = tmp;
-  }
-  return copy;
-}
 
 interface Pair {
   id: string;
@@ -37,10 +27,11 @@ export default function Relacionar() {
 
   const load = async () => {
     if (!store) return;
-    const words = await store.listRandom(50);
-    if (words.length < 4) return;
-    const pool = shuffle(words as WordRow[]).slice(0, 6);
-    const ps: Pair[] = pool.map((w) => ({
+    // Pool con rotación (buffer `games:recent` compartido entre juegos).
+    const pool = await pickGameWords(store, { count: 6 });
+    if (pool.length < 4) return;
+    // El pool llega pre-barajado: las primeras 6 son la ronda.
+    const ps: Pair[] = pool.slice(0, 6).map((w) => ({
       id: w.id,
       spanish: w.spanish,
       nasaYuwe: w.nasaYuwe,

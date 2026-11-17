@@ -4,6 +4,7 @@ import type { MediaManifestRow, MediaKind } from "./media-cache";
 import { manifestKey } from "./media-cache";
 import { checkOutboxCapacity, checkOutboxPayloadSize } from "./outbox";
 import { normalize } from "../normalize";
+import { shuffle } from "../lib/game-random";
 
 /**
  * Implementación en memoria de WordStore: misma semántica que SQLite
@@ -57,16 +58,16 @@ export class MemoryWordStore implements WordStore {
     return all.slice(offset, offset + limit);
   }
 
-  /** Paridad con SQLiteWordStore.listRandom: muestra aleatoria total. */
-  async listRandom(limit = 50): Promise<WordRow[]> {
-    const all = [...this.words.values()].filter((w) => w.status !== 'DRAFT');
-    for (let i = all.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = all[i]!;
-      all[i] = all[j]!;
-      all[j] = tmp;
-    }
-    return all.slice(0, limit);
+  /**
+   * Paridad con SQLiteWordStore.listRandom: muestra aleatoria total.
+   * `excludeIds` omite las palabras recientes del buffer de rotación.
+   */
+  async listRandom(limit = 50, excludeIds?: readonly string[]): Promise<WordRow[]> {
+    const excluded = new Set(excludeIds ?? []);
+    const all = [...this.words.values()]
+      .filter((w) => w.status !== 'DRAFT')
+      .filter((w) => !excluded.has(w.id));
+    return shuffle(all).slice(0, limit);
   }
 
   async listCategories(): Promise<string[]> {
@@ -89,12 +90,17 @@ export class MemoryWordStore implements WordStore {
     return [...this.words.values()].filter((w) => w.status !== 'DRAFT' && !!w.audioUrl).length;
   }
 
-  /** Paridad con SQLiteWordStore.listWithAudio: query directa por audioUrl. */
-  async listWithAudio(limit = 200): Promise<WordRow[]> {
-    return [...this.words.values()]
+  /**
+   * Paridad con SQLiteWordStore.listWithAudio: query directa por audioUrl.
+   * Muestreo aleatorio (antes ordenaba alfabético y repetía el mismo
+   * prefijo del catálogo); `excludeIds` omite las palabras recientes.
+   */
+  async listWithAudio(limit = 200, excludeIds?: readonly string[]): Promise<WordRow[]> {
+    const excluded = new Set(excludeIds ?? []);
+    const all = [...this.words.values()]
       .filter((w) => w.status !== 'DRAFT' && !!w.audioUrl && w.audioUrl !== "")
-      .sort((a, b) => a.spanish.localeCompare(b.spanish, "es"))
-      .slice(0, limit);
+      .filter((w) => !excluded.has(w.id));
+    return shuffle(all).slice(0, limit);
   }
 
   async getLastSync(): Promise<string | null> {

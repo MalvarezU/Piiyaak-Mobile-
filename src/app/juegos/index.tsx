@@ -142,13 +142,14 @@ const styles = StyleSheet.create({
     width: spacing.xl,
     height: spacing.xl,
     borderRadius: radiusScale.md,
-    borderCurve: "continuous",
+    overflow: "hidden",
     backgroundColor: theme.successSoft,
     alignItems: "center",
     justifyContent: "center",
   },
   iconBoxLocked: {
-    backgroundColor: theme.background,
+    overflow: "hidden",
+    backgroundColor: theme.border,
   },
   tileBody: {
     flex: 1,

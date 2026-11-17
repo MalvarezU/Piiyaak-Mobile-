@@ -622,7 +622,10 @@ describe("SQLiteWordStore.listWithAudio y listRandom", () => {
       word("w3", "Zapote", { audioUrl: "https://cdn.test/c.mp3" }),
     ]);
 
-    expect((await store.listWithAudio()).map((w) => w.id)).toEqual(["w1", "w3"]);
+    // El orden es aleatorio (ORDER BY RANDOM): solo se afirma el conjunto
+    // de ids con audio publicado, no su orden.
+    const ids = (await store.listWithAudio()).map((w) => w.id);
+    expect(new Set(ids)).toEqual(new Set(["w1", "w3"]));
   });
 
   it("listWithAudio aplica el límite indicado", async () => {

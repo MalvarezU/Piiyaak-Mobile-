@@ -106,14 +106,22 @@ export interface WordStore {
   getById(id: string): Promise<WordRow | null>;
   count(): Promise<number>;
   countWordsWithAudio(): Promise<number>;
-  /** Palabras con audio publicado (juegos de escucha): query directa. */
-  listWithAudio(limit?: number): Promise<WordRow[]>;
+  /**
+   * Palabras con audio publicado (juegos de escucha): query directa.
+   * `ORDER BY RANDOM()`: el corte alfabético previo muestreaba siempre el
+   * mismo prefijo del catálogo a medida que crecían los audios.
+   * `excludeIds` omite las palabras recientes del buffer de rotación
+   * (`games:recent`), parameterizado con `NOT IN`.
+   */
+  listWithAudio(limit?: number, excludeIds?: readonly string[]): Promise<WordRow[]>;
   /**
    * Muestra aleatoria desde TODO el diccionario publicado (pools de
    * juegos): antes los juegos leían `listAZ(null, 50, 0)` — siempre las
    * mismas primeras 50 alfabéticas. `ORDER BY RANDOM()` en SQLite.
+   * `excludeIds` omite las palabras recientes del buffer de rotación
+   * (`games:recent`), parameterizado con `NOT IN`.
    */
-  listRandom(limit?: number): Promise<WordRow[]>;
+  listRandom(limit?: number, excludeIds?: readonly string[]): Promise<WordRow[]>;
   getLastSync(): Promise<string | null>;
   setLastSync(iso: string): Promise<void>;
   getKV(key: string): Promise<string | null>;
@@ -149,6 +157,21 @@ export class AsyncStorageKV implements KeyValue {
 const LAST_SYNC_KEY = "piiyaak:lastSync";
 /** Versión de esquema (B1): "4" con tabla media_manifest aditiva. */
 export const SCHEMA_VERSION = "4";
+
+/**
+ * Cláusula de exclusión para los pools de juegos: `NOT IN` parameterizado
+ * solo cuando la lista es no vacía (un `IN ()` vacío sería error de
+ * sintaxis en SQLite). La usan `listRandom` y `listWithAudio`.
+ */
+function exclusionClause(
+  excludeIds?: readonly string[]
+): { sql: string; params: string[] } {
+  if (!excludeIds || excludeIds.length === 0) return { sql: "", params: [] };
+  return {
+    sql: ` AND id NOT IN (${excludeIds.map(() => "?").join(",")})`,
+    params: [...excludeIds],
+  };
+}
 
 export class SQLiteWordStore implements WordStore {
   constructor(private db: SQLiteDatabase) {}
@@ -270,19 +293,23 @@ export class SQLiteWordStore implements WordStore {
    * Pool de los juegos de escucha: query directa por `audioUrl`,
    * independiente del orden alfabético de `listAZ` (el corte a 200
    * alfabéticas podía dejar el pool vacío aunque hubiera audios).
+   * Muestreo aleatorio (`ORDER BY RANDOM()`): el `ORDER BY spanish`
+   * previo repetía siempre el mismo prefijo alfabético del catálogo.
    */
-  async listWithAudio(limit = 200): Promise<WordRow[]> {
+  async listWithAudio(limit = 200, excludeIds?: readonly string[]): Promise<WordRow[]> {
+    const ex = exclusionClause(excludeIds);
     return this.db.getAllAsync<WordRow>(
-      "SELECT * FROM words WHERE audioUrl IS NOT NULL AND audioUrl != '' AND (status IS NULL OR status != 'DRAFT') ORDER BY spanish LIMIT ?",
-      [limit]
+      `SELECT * FROM words WHERE audioUrl IS NOT NULL AND audioUrl != '' AND (status IS NULL OR status != 'DRAFT')${ex.sql} ORDER BY RANDOM() LIMIT ?`,
+      [...ex.params, limit]
     );
   }
 
   /** Pools de juegos: muestra aleatoria desde TODO el diccionario. */
-  async listRandom(limit = 50): Promise<WordRow[]> {
+  async listRandom(limit = 50, excludeIds?: readonly string[]): Promise<WordRow[]> {
+    const ex = exclusionClause(excludeIds);
     return this.db.getAllAsync<WordRow>(
-      "SELECT * FROM words WHERE (status IS NULL OR status != 'DRAFT') ORDER BY RANDOM() LIMIT ?",
-      [limit]
+      `SELECT * FROM words WHERE (status IS NULL OR status != 'DRAFT')${ex.sql} ORDER BY RANDOM() LIMIT ?`,
+      [...ex.params, limit]
     );
   }
 

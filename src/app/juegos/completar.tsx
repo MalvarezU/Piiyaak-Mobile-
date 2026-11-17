@@ -4,18 +4,8 @@ import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme, spacing, radiusScale, fonts, type, minHit } from "../../theme";
 import { Screen, ThemedText, Button } from "../../components/ui";
+import { pickGameWords } from "../../lib/game-words";
 import type { WordRow } from "../../db/types";
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = copy[i] as T;
-    copy[i] = copy[j] as T;
-    copy[j] = tmp;
-  }
-  return copy;
-}
 
 function normalize(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -65,10 +55,12 @@ export default function Completar() {
     let alive = true;
     (async () => {
       if (!store) return;
-      const all = await store.listRandom(50);
-      if (!alive || all.length < 4) return;
+      // Pool con rotación (buffer `games:recent` compartido entre juegos).
+      const pool = await pickGameWords(store, { count: 8 });
+      if (!alive || pool.length < 4) return;
       if (alive) {
-        const picked = shuffle(all as WordRow[]).slice(0, 8);
+        // El pool llega pre-barajado: las primeras 8 son la ronda.
+        const picked = pool.slice(0, 8);
         setWords(picked);
         setHints(picked.map((w) => makeHint(w.nasaYuwe, w.id)));
       }

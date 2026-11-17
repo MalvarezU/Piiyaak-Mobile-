@@ -9,28 +9,20 @@ import type { WordRow } from "../../db/types";
 import { createAudioPlayer } from "../../audio-player";
 import { resolveAudioUri } from "../../audio";
 import { MIN_AUDIO_WORDS } from "./constants";
+import { pickGameWords } from "../../lib/game-words";
+import { buildRound } from "../../lib/game-questions";
+import { stringSimilarity } from "../../lib/string-similarity";
 
 const MIN = MIN_AUDIO_WORDS;
 const MAX_ROUNDS = 8;
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = copy[i] as T;
-    copy[i] = copy[j] as T;
-    copy[j] = tmp;
-  }
-  return copy;
-}
 
 export default function Escucha() {
   const { store } = useDb();
   const router = useRouter();
   const player = useRef(createAudioPlayer());
   const [rounds, setRounds] = useState<WordRow[]>([]);
-  /** Pool completo con audio: fuente de distractores con variedad real. */
-  const [pool, setPool] = useState<WordRow[]>([]);
+  /** Opciones pre-armadas por ronda (buildRound): sin duplicados ni fuga. */
+  const [roundOptions, setRoundOptions] = useState<string[][]>([]);
   /** Incrementa al reintentar: re-baraja rondas (antes repetía las mismas 8). */
   const [gameKey, setGameKey] = useState(0);
   const [roundIndex, setRoundIndex] = useState(0);
@@ -51,18 +43,32 @@ export default function Escucha() {
     let alive = true;
     (async () => {
       if (!store) return;
-      // Pool directo por audioUrl (query dedicada): nunca depende del
-      // corte alfabético del listAZ, que dejaba el juego sin rondas
-      // cuando las palabras con audio ordenaban tarde.
-      const all = await store.listWithAudio(200);
+      // Pool directo por audioUrl con rotación (buffer `games:recent`
+      // compartido entre juegos): nunca depende del corte alfabético y ya
+      // no repite las mismas palabras entre sesiones.
+      const pool = await pickGameWords(store, { count: 8, withAudio: true });
       if (!alive) return;
-      const shuffled = shuffle(all as WordRow[]);
-      const chosen = shuffled.slice(0, MAX_ROUNDS);
-      if (alive) {
-        setPool(all as WordRow[]);
-        setRounds(chosen);
+      if (pool.length < 4) {
+        // Estado vacío vigente: el gate de MIN abajo muestra "Requiere audios".
+        setRounds([]);
+        setRoundOptions([]);
         setReady(true);
+        return;
       }
+      // Opciones únicas por cadena y sin fuga, con distractores parecidos
+      // por español (discriminación fina). `rounds` sale de las preguntas
+      // (pool deduplicado por clave `spanish||nasaYuwe`): con homónimos la
+      // ronda y sus opciones siempre quedan aparejadas.
+      const built = buildRound({
+        pool,
+        askCount: MAX_ROUNDS,
+        distractorCount: 3,
+        answerOf: (w) => w.spanish,
+        similarityOf: (a, b) => stringSimilarity(a.spanish, b.spanish),
+      });
+      setRounds(built.map((q) => q.word));
+      setRoundOptions(built.map((q) => q.options));
+      setReady(true);
     })();
     return () => {
       alive = false;
@@ -78,20 +84,14 @@ export default function Escucha() {
 
   useEffect(() => {
     if (rounds.length === 0) return;
-    const word = rounds[roundIndex];
-    if (!word) return;
-    // Distractores del pool COMPLETO con audio (no solo de las 8 rondas
-    // de la sesión): más variedad y opciones menos predecibles.
-    const source = pool.length >= 4 ? pool : rounds;
-    const others = source.filter((w) => w.id !== word.id);
-    const distractors = shuffle(others).slice(0, 3).map((w) => w.spanish);
-    const opts = shuffle([word.spanish, ...distractors]);
-    setOptions(opts);
+    // Opciones ya armadas al cargar (buildRound): sin duplicados por
+    // cadena y sin las respuestas de preguntas futuras.
+    setOptions(roundOptions[roundIndex] ?? []);
     setSelected(null);
     setFeedback(null);
     setPlaying(false);
     void player.current.unload();
-  }, [rounds, roundIndex, pool]);
+  }, [rounds, roundIndex, roundOptions]);
 
   const currentWord = rounds[roundIndex] as WordRow;
 

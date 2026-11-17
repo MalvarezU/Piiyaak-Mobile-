@@ -3,18 +3,9 @@ import { Text, TouchableOpacity, View, StyleSheet, ScrollView } from "react-nati
 import { useRouter } from "expo-router";
 import { useDb } from "../../db-context";
 import { theme } from "../../theme";
-import type { WordRow } from "../../db/types";
-
-function shuffle<T>(arr: T[]): T[] {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = copy[i] as T;
-    copy[i] = copy[j] as T;
-    copy[j] = tmp;
-  }
-  return copy;
-}
+import { pickGameWords } from "../../lib/game-words";
+import { buildRound } from "../../lib/game-questions";
+import { stringSimilarity } from "../../lib/string-similarity";
 
 interface Question {
   prompt: string;
@@ -37,23 +28,28 @@ export default function Flashcards() {
     let alive = true;
     (async () => {
       if (!store) return;
-      const words = await store.listRandom(50);
-      if (!alive || words.length < 4) return;
-      const pool = words as WordRow[];
-      const ask = shuffle(pool).slice(0, 8);
-      const qs: Question[] = ask.map((word) => {
-        const answer = direction === "es-nasa" ? word.nasaYuwe : word.spanish;
-        const distractors = shuffle(pool.filter((w) => w.id !== word.id))
-          .slice(0, 3)
-          .map((w) => (direction === "es-nasa" ? w.nasaYuwe : w.spanish));
-        const options = shuffle([answer, ...distractors]);
-        return {
-          prompt: direction === "es-nasa" ? "¿Cómo se dice en Nasa Yuwe?" : "¿Qué significa en español?",
-          title: direction === "es-nasa" ? word.spanish : word.nasaYuwe,
-          options,
-          correctIndex: options.indexOf(answer),
-        };
+      // Pool con rotación (buffer `games:recent` compartido entre juegos):
+      // pickGameWords registra lo devuelto, la pantalla no toca el buffer.
+      const pool = await pickGameWords(store, { count: 8 });
+      if (!alive || pool.length < 4) return;
+      // Opciones únicas y sin fuga: los distractores salen del pool no
+      // preguntado, con similaridad para forzar discriminación fina.
+      const built = buildRound({
+        pool,
+        askCount: 8,
+        distractorCount: 3,
+        answerOf: direction === "es-nasa" ? (w) => w.nasaYuwe : (w) => w.spanish,
+        similarityOf: (a, b) => stringSimilarity(a.nasaYuwe, b.nasaYuwe),
       });
+      const qs: Question[] = built.map((q) => ({
+        prompt:
+          direction === "es-nasa"
+            ? "¿Cómo se dice en Nasa Yuwe?"
+            : "¿Qué significa en español?",
+        title: direction === "es-nasa" ? q.word.spanish : q.word.nasaYuwe,
+        options: q.options,
+        correctIndex: q.correctIndex,
+      }));
       if (alive) setQuestions(qs);
     })();
     return () => { alive = false; };

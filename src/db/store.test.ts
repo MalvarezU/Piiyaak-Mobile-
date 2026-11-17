@@ -41,8 +41,13 @@ describe("MemoryWordStore [app]", () => {
     ]);
     // zorro ordena al final del alfabeto: con el corte alfabético del
     // listAZ quedaría fuera; la query directa lo trae igual.
-    expect((await s.listWithAudio(200)).map((r) => r.id)).toEqual(["a1", "z1"]);
-    expect((await s.listWithAudio(1)).map((r) => r.id)).toEqual(["a1"]);
+    // El orden es aleatorio (ORDER BY RANDOM): solo se afirma el conjunto
+    // de ids con audio, no su orden.
+    const todos = await s.listWithAudio(200);
+    expect(new Set(todos.map((r) => r.id))).toEqual(new Set(["a1", "z1"]));
+    const uno = await s.listWithAudio(1);
+    expect(uno).toHaveLength(1);
+    expect(["a1", "z1"]).toContain(uno[0]!.id);
   });
 
   it("listRandom: muestrea desde TODO el diccionario, no solo el tramo alfabético", async () => {
