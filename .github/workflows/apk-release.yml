@@ -107,7 +107,7 @@ jobs:
             --manifest dist/seed/manifest.json \
             --media dist/seed/unpacked/media
           # Mapa de require() regenerado desde los archivos reales
-          npx tsx scripts/generate-bundled-media-map.ts
+          bun run scripts/generate-bundled-media-map.ts
 
       - name: Prebuild nativo + firma release
         run: |

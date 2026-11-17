@@ -1,5 +1,5 @@
 /**
- * Embebe los medios del seed en assets/: media/<sha>.<ext> → assets/audios|images
+ * Embebe los medios del seed en assets/: media/<sha>.<ext> → assets/audios|illustrations
  * con el nombre original (basename del objectKey del manifest). Después,
  * generate-bundled-media-map.ts regenera el mapa de require().
  *
@@ -7,7 +7,8 @@
  */
 import { existsSync, mkdirSync, copyFileSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { seedMediaDest } from "./seed-media";
 
 interface ManifestFile {
   objectKey: string;
@@ -38,18 +39,12 @@ let copied = 0;
 for (const f of manifest.files) {
   const src = join(mediaDir, basename(f.localPath));
   if (!existsSync(src)) throw new Error(`falta el medio del seed: ${src}`);
-  // Destino: assets/audios/<basename> o assets/illustrations/<basename> (por el objectKey)
-  const kind = f.objectKey.startsWith("audios/")
-    ? "audios"
-    : f.objectKey.startsWith("illustrations/")
-      ? "illustrations"
-      : "images";
-  const destDir = join(assetsDir, kind);
-  mkdirSync(destDir, { recursive: true });
-  const dest = join(destDir, basename(f.objectKey));
+  // Destino por tipo MIME (única fuente de verdad: seed-media.ts): audio/* → assets/audios, image/* → assets/illustrations.
+  const dest = seedMediaDest(assetsDir, f.mimeType, f.objectKey);
+  mkdirSync(dirname(dest), { recursive: true });
   copyFileSync(src, dest);
   copied++;
-  console.log(`embebido: ${kind}/${basename(f.objectKey)}`);
+  console.log(`embebido: ${dest.slice(assetsDir.length + 1)}`);
 }
 
 // Verificación: cada archivo embebido coincide con su sha256
@@ -59,8 +54,7 @@ const verify = (p: string): string => {
   return h.digest("hex");
 };
 for (const f of manifest.files) {
-  const kind = f.objectKey.startsWith("audios/") ? "audios" : "images";
-  const p = join(assetsDir, kind, basename(f.objectKey));
+  const p = seedMediaDest(assetsDir, f.mimeType, f.objectKey);
   const got = verify(p);
   if (got !== f.sha256) throw new Error(`hash mismatch: ${p}`);
 }
